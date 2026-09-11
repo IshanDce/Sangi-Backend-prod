@@ -78,43 +78,72 @@ export const registerStep4Kyc = async (req: AuthRequest, res: Response): Promise
   }
 };
 
-// ─── GET /api/v1/staff/search?service=cleaning&lat=28.45&lng=77.02
+// ─── GET /api/v1/staff/search?service=X&lat=Y&lng=Z
 export const searchStaff = async (req: Request, res: Response): Promise<void> => {
   try {
     const { service, lat, lng } = req.query;
-    const query: Record<string, unknown> = { kycStatus: "approved" };
-    if (service) query.services = service;
+    const matchStage: Record<string, unknown> = { kycStatus: "approved" };
+    if (service) matchStage.services = service;
 
-    let staffProfiles;
+    let staffProfiles: any[];
+
     if (lat && lng) {
-      staffProfiles = await StaffProfile.find({
-        ...query,
-        location: {
-          $near: {
-            $geometry: { type: "Point", coordinates: [parseFloat(lng as string), parseFloat(lat as string)] },
-            $maxDistance: 15000, // 15km
+      const latitude = parseFloat(lat as string);
+      const longitude = parseFloat(lng as string);
+      const MAX_DISTANCE_METERS = 10000; // 10km
+
+      staffProfiles = await StaffProfile.aggregate([
+        {
+          $geoNear: {
+            near: { type: "Point", coordinates: [longitude, latitude] },
+            distanceField: "distMeters",
+            maxDistance: MAX_DISTANCE_METERS,
+            spherical: true,
+            query: matchStage,
           },
         },
-      }).populate("userId", "fullName profilePhotoUrl");
+        { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "userInfo" } },
+        { $unwind: { path: "$userInfo", preserveNullAndEmptyArrays: false } },
+        {
+          $project: {
+            _id: "$userInfo._id",
+            fullName: "$userInfo.fullName",
+            profilePhotoUrl: "$userInfo.profilePhotoUrl",
+            title: 1,
+            rating: 1,
+            reviewCount: 1,
+            services: 1,
+            about: 1,
+            experience: 1,
+            isKycVerified: 1,
+            distanceKm: { $divide: ["$distMeters", 1000] },
+          },
+        },
+      ]);
     } else {
-      staffProfiles = await StaffProfile.find(query).populate("userId", "fullName profilePhotoUrl");
+      const profiles = await StaffProfile.find(matchStage)
+        .populate("userId", "fullName profilePhotoUrl")
+        .limit(50);
+
+      staffProfiles = profiles.map((p) => {
+        const user = p.userId as unknown as { _id: string; fullName: string; profilePhotoUrl?: string };
+        return {
+          _id: user._id,
+          fullName: user.fullName,
+          profilePhotoUrl: user.profilePhotoUrl,
+          title: p.title,
+          rating: p.rating,
+          reviewCount: p.reviewCount,
+          services: p.services,
+          about: p.about,
+          experience: p.experience,
+          isKycVerified: p.isKycVerified,
+          distanceKm: null,
+        };
+      });
     }
 
-    const results = staffProfiles.map((p) => {
-      const user = p.userId as unknown as { _id: string; fullName: string; profilePhotoUrl?: string };
-      return {
-        id: user._id,
-        fullName: user.fullName,
-        profilePhotoUrl: user.profilePhotoUrl,
-        title: p.title,
-        rating: p.rating,
-        reviewCount: p.reviewCount,
-        services: p.services,
-        availability: p.availability,
-        isKycVerified: p.isKycVerified,
-      };
-    });
-    res.json({ success: true, results });
+    res.json({ success: true, staff: staffProfiles });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
   }
@@ -180,6 +209,25 @@ export const updateBankAccount = async (req: AuthRequest, res: Response): Promis
       { new: true }
     );
     res.json({ success: true, profile });
+  } catch (err) {
+    res.status(500).json({ success: false, message: String(err) });
+  }
+};
+
+// ─── PUT /api/v1/staff/me/location  (called by app every 3 min)
+export const updateMyLocation = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { lat, lng } = req.body;
+    if (lat === undefined || lng === undefined) {
+      res.status(400).json({ success: false, message: "lat and lng are required" });
+      return;
+    }
+    await StaffProfile.findOneAndUpdate(
+      { userId: req.user!.id },
+      { location: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] } },
+      { new: true }
+    );
+    res.json({ success: true, message: "Location updated" });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
   }

@@ -10,3 +10,4 @@ export declare const updateMyProfile: (req: AuthRequest, res: Response) => Promi
 export declare const updateMyServices: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const updateMyAvailability: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const updateBankAccount: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const updateMyLocation: (req: AuthRequest, res: Response) => Promise<void>;

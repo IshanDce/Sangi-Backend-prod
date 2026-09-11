@@ -17,5 +17,6 @@ router.put("/me/profile", auth_1.protect, (0, auth_1.requireRole)("staff"), staf
 router.put("/me/services", auth_1.protect, (0, auth_1.requireRole)("staff"), staff_controller_1.updateMyServices);
 router.put("/me/availability", auth_1.protect, (0, auth_1.requireRole)("staff"), staff_controller_1.updateMyAvailability);
 router.put("/me/bank-account", auth_1.protect, (0, auth_1.requireRole)("staff"), staff_controller_1.updateBankAccount);
+router.put("/me/location", auth_1.protect, (0, auth_1.requireRole)("staff"), staff_controller_1.updateMyLocation);
 exports.default = router;
 //# sourceMappingURL=staff.routes.js.map
