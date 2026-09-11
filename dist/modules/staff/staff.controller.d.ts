@@ -1,0 +1,12 @@
+import { Request, Response } from "express";
+import { AuthRequest } from "../../middleware/auth";
+export declare const registerStep1: (req: Request, res: Response) => Promise<void>;
+export declare const registerStep2Services: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const registerStep3Availability: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const registerStep4Kyc: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const searchStaff: (req: Request, res: Response) => Promise<void>;
+export declare const getStaffProfile: (req: Request, res: Response) => Promise<void>;
+export declare const updateMyProfile: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const updateMyServices: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const updateMyAvailability: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const updateBankAccount: (req: AuthRequest, res: Response) => Promise<void>;

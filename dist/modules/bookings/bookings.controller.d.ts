@@ -1,0 +1,15 @@
+import { Response } from "express";
+import { AuthRequest } from "../../middleware/auth";
+export declare const createOrder: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const confirmBookingPayment: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getCustomerBookings: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getStaffBookings: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getBookingById: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const acceptBooking: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const declineBooking: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const cancelBooking: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const startService: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const completeService: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const payServiceFee: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const completeBookingWithReview: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const createServicePaymentOrder: (req: AuthRequest, res: Response) => Promise<void>;
