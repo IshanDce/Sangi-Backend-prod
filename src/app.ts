@@ -6,6 +6,7 @@ dotenv.config();
 
 import { connectDB } from "./config/db";
 import { errorHandler } from "./middleware/errorHandler";
+import { locationLogger, searchLogger } from "./middleware/requestLogger";
 
 import authRoutes from "./modules/auth/auth.routes";
 import userRoutes from "./modules/users/users.routes";
@@ -26,6 +27,10 @@ app.use("/api/v1/webhook", webhookRoutes);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ─── Location & search logging (helps watch live updates in pm2 / journalctl) ───
+app.use("/api/v1", locationLogger);
+app.use("/api/v1", searchLogger);
 
 // ─── Routes ───
 app.use("/api/v1/auth", authRoutes);
