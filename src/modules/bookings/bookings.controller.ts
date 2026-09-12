@@ -125,7 +125,7 @@ export const getCustomerBookings = async (req: AuthRequest, res: Response): Prom
     const query: Record<string, any> = { customerId: req.user!.id };
     if (statusFilter) query.status = { $in: statusFilter };
     const bookings = await Booking.find(query)
-      .populate("staffId", "fullName profilePhotoUrl")
+      .populate("staffId", "fullName profilePhotoUrl phone")
       .sort({ createdAt: -1 });
 
     res.json({ success: true, bookings });

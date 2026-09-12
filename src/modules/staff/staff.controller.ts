@@ -157,7 +157,10 @@ export const searchStaff = async (req: Request, res: Response): Promise<void> =>
             services: 1,
             about: 1,
             experience: 1,
-            isKycVerified: 1,
+            serviceArea: 1,
+            availability: 1,
+            isKycVerified: { $eq: ["$kycStatus", "approved"] },
+            kycStatus: 1,
             distanceKm: { $divide: ["$distMeters", 1000] },
           },
         },
@@ -188,7 +191,10 @@ export const searchStaff = async (req: Request, res: Response): Promise<void> =>
           services: p.services,
           about: p.about,
           experience: p.experience,
-          isKycVerified: p.isKycVerified,
+          serviceArea: p.serviceArea,
+          availability: p.availability,
+          isKycVerified: p.kycStatus === "approved",
+          kycStatus: p.kycStatus,
           distanceKm: null,
         };
       });
@@ -211,7 +217,17 @@ export const getStaffProfile = async (req: Request, res: Response): Promise<void
       .sort({ createdAt: -1 })
       .limit(10);
 
-    res.json({ success: true, profile, reviews });
+    // Flatten for the customer app — populate userId and derive isKycVerified
+    const profileObj = profile.toObject() as unknown as Record<string, unknown>;
+    const userObj = profileObj.userId as Record<string, unknown> | undefined;
+    const flatProfile = {
+      ...profileObj,
+      fullName: userObj?.fullName,
+      profilePhotoUrl: userObj?.profilePhotoUrl,
+      isKycVerified: profileObj.kycStatus === "approved",
+    };
+
+    res.json({ success: true, profile: flatProfile, reviews });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
   }

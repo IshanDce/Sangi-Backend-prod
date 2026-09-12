@@ -119,7 +119,7 @@ const getCustomerBookings = async (req, res) => {
         if (statusFilter)
             query.status = { $in: statusFilter };
         const bookings = await Booking_1.Booking.find(query)
-            .populate("staffId", "fullName profilePhotoUrl")
+            .populate("staffId", "fullName profilePhotoUrl phone")
             .sort({ createdAt: -1 });
         res.json({ success: true, bookings });
     }

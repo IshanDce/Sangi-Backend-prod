@@ -10,6 +10,7 @@ const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const db_1 = require("./config/db");
 const errorHandler_1 = require("./middleware/errorHandler");
+const requestLogger_1 = require("./middleware/requestLogger");
 const auth_routes_1 = __importDefault(require("./modules/auth/auth.routes"));
 const users_routes_1 = __importDefault(require("./modules/users/users.routes"));
 const staff_routes_1 = __importDefault(require("./modules/staff/staff.routes"));
@@ -25,6 +26,9 @@ app.use((0, cors_1.default)({ origin: "*", credentials: true }));
 app.use("/api/v1/webhook", webhooks_routes_1.default);
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
+// ─── Location & search logging (helps watch live updates in pm2 / journalctl) ───
+app.use("/api/v1", requestLogger_1.locationLogger);
+app.use("/api/v1", requestLogger_1.searchLogger);
 // ─── Routes ───
 app.use("/api/v1/auth", auth_routes_1.default);
 app.use("/api/v1/users", users_routes_1.default);

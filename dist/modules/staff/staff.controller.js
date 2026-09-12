@@ -143,7 +143,10 @@ const searchStaff = async (req, res) => {
                         services: 1,
                         about: 1,
                         experience: 1,
-                        isKycVerified: 1,
+                        serviceArea: 1,
+                        availability: 1,
+                        isKycVerified: { $eq: ["$kycStatus", "approved"] },
+                        kycStatus: 1,
                         distanceKm: { $divide: ["$distMeters", 1000] },
                     },
                 },
@@ -173,7 +176,10 @@ const searchStaff = async (req, res) => {
                     services: p.services,
                     about: p.about,
                     experience: p.experience,
-                    isKycVerified: p.isKycVerified,
+                    serviceArea: p.serviceArea,
+                    availability: p.availability,
+                    isKycVerified: p.kycStatus === "approved",
+                    kycStatus: p.kycStatus,
                     distanceKm: null,
                 };
             });
@@ -197,7 +203,16 @@ const getStaffProfile = async (req, res) => {
             .populate("customerId", "fullName profilePhotoUrl")
             .sort({ createdAt: -1 })
             .limit(10);
-        res.json({ success: true, profile, reviews });
+        // Flatten for the customer app — populate userId and derive isKycVerified
+        const profileObj = profile.toObject();
+        const userObj = profileObj.userId;
+        const flatProfile = {
+            ...profileObj,
+            fullName: userObj?.fullName,
+            profilePhotoUrl: userObj?.profilePhotoUrl,
+            isKycVerified: profileObj.kycStatus === "approved",
+        };
+        res.json({ success: true, profile: flatProfile, reviews });
     }
     catch (err) {
         res.status(500).json({ success: false, message: String(err) });
