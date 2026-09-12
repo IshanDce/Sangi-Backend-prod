@@ -9,6 +9,9 @@ export interface IUser extends Document {
     isPhoneVerified: boolean;
     fcmToken?: string;
     walletBalance: number;
+    lastKnownLat?: number;
+    lastKnownLng?: number;
+    lastLocationUpdateAt?: Date;
     comparePassword(pw: string): Promise<boolean>;
 }
 export declare const User: mongoose.Model<IUser, {}, {}, {}, Document<unknown, {}, IUser, {}, mongoose.DefaultSchemaOptions> & IUser & Required<{

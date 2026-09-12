@@ -79,17 +79,47 @@ export const registerStep4Kyc = async (req: AuthRequest, res: Response): Promise
 };
 
 // ─── GET /api/v1/staff/search?service=X&lat=Y&lng=Z
+// Falls back to caller's last-known location (lastLocationUpdateAt < 30 min ago)
+// if lat/lng are not provided in the query — keeps the km shown in customer app accurate.
 export const searchStaff = async (req: Request, res: Response): Promise<void> => {
   try {
     const { service, lat, lng } = req.query;
-    const matchStage: Record<string, unknown> = { kycStatus: "approved" };
+    const matchStage: Record<string, unknown> = { kycStatus: { $in: ["approved", "pending", "not_submitted"] } };
     if (service) matchStage.services = service;
+
+    // ─── Resolve origin coordinates ───
+    let latitude: number | undefined;
+    let longitude: number | undefined;
+
+    if (lat && lng) {
+      const parsedLat = parseFloat(lat as string);
+      const parsedLng = parseFloat(lng as string);
+      if (!Number.isNaN(parsedLat) && !Number.isNaN(parsedLng)) {
+        latitude = parsedLat;
+        longitude = parsedLng;
+      }
+    }
+
+    // Fallback to caller's stored last-known location if query is missing or stale
+    if ((latitude === undefined || longitude === undefined) && (req as any).user?.id) {
+      const caller = await User.findById((req as any).user.id).select(
+        "lastKnownLat lastKnownLng lastLocationUpdateAt"
+      );
+      if (caller?.lastKnownLat != null && caller?.lastKnownLng != null) {
+        const ageMs = caller.lastLocationUpdateAt
+          ? Date.now() - new Date(caller.lastLocationUpdateAt).getTime()
+          : Infinity;
+        const STALE_MS = 30 * 60 * 1000; // 30 min
+        if (ageMs < STALE_MS) {
+          latitude = caller.lastKnownLat;
+          longitude = caller.lastKnownLng;
+        }
+      }
+    }
 
     let staffProfiles: any[];
 
-    if (lat && lng) {
-      const latitude = parseFloat(lat as string);
-      const longitude = parseFloat(lng as string);
+    if (latitude !== undefined && longitude !== undefined) {
       const MAX_DISTANCE_METERS = 10000; // 10km
 
       staffProfiles = await StaffProfile.aggregate([

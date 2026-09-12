@@ -11,6 +11,10 @@ export interface IUser extends Document {
   isPhoneVerified: boolean;
   fcmToken?: string;
   walletBalance: number;
+  // ─── Customer live location (updated by app every 3 min) ───
+  lastKnownLat?: number;
+  lastKnownLng?: number;
+  lastLocationUpdateAt?: Date;
   comparePassword(pw: string): Promise<boolean>;
 }
 
@@ -25,6 +29,9 @@ const UserSchema = new Schema<IUser>(
     isPhoneVerified: { type: Boolean, default: false },
     fcmToken: { type: String, default: null },
     walletBalance: { type: Number, default: 0 },
+    lastKnownLat: { type: Number, default: null },
+    lastKnownLng: { type: Number, default: null },
+    lastLocationUpdateAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

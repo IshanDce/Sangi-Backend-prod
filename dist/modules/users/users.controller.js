@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateFcmToken = exports.updatePhoto = exports.updateMe = exports.getMe = void 0;
+exports.getMyLocation = exports.updateMyLocation = exports.updateFcmToken = exports.updatePhoto = exports.updateMe = exports.getMe = void 0;
 const User_1 = require("../../models/User");
 const imagekit_1 = require("../../config/imagekit");
 // GET /api/v1/users/me
@@ -63,4 +63,51 @@ const updateFcmToken = async (req, res) => {
     }
 };
 exports.updateFcmToken = updateFcmToken;
+// PUT /api/v1/users/me/location  — called by customer app every 3 minutes
+// Keeps last-known coords fresh so /staff/search can rank by real distance
+const updateMyLocation = async (req, res) => {
+    try {
+        const { lat, lng } = req.body;
+        if (lat === undefined || lng === undefined || lat === null || lng === null) {
+            res.status(400).json({ success: false, message: "lat and lng are required" });
+            return;
+        }
+        const latNum = parseFloat(lat);
+        const lngNum = parseFloat(lng);
+        if (Number.isNaN(latNum) || Number.isNaN(lngNum)) {
+            res.status(400).json({ success: false, message: "lat/lng must be numeric" });
+            return;
+        }
+        await User_1.User.findByIdAndUpdate(req.user.id, {
+            lastKnownLat: latNum,
+            lastKnownLng: lngNum,
+            lastLocationUpdateAt: new Date(),
+        });
+        res.json({ success: true, message: "Location updated" });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+    }
+};
+exports.updateMyLocation = updateMyLocation;
+// GET /api/v1/users/me/location  — fetch caller's last-known coords + age
+const getMyLocation = async (req, res) => {
+    try {
+        const user = await User_1.User.findById(req.user.id).select("lastKnownLat lastKnownLng lastLocationUpdateAt");
+        if (!user) {
+            res.status(404).json({ success: false, message: "User not found" });
+            return;
+        }
+        res.json({
+            success: true,
+            lat: user.lastKnownLat ?? null,
+            lng: user.lastKnownLng ?? null,
+            updatedAt: user.lastLocationUpdateAt ?? null,
+        });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+    }
+};
+exports.getMyLocation = getMyLocation;
 //# sourceMappingURL=users.controller.js.map

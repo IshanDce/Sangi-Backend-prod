@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getMe, updateMe, updatePhoto, updateFcmToken } from "./users.controller";
+import { getMe, updateMe, updatePhoto, updateFcmToken, updateMyLocation, getMyLocation } from "./users.controller";
 import { protect } from "../../middleware/auth";
 import { upload } from "../../middleware/upload";
 
@@ -11,5 +11,7 @@ router.get("/me", getMe);
 router.put("/me", updateMe);
 router.put("/me/photo", upload.single("photo"), updatePhoto);
 router.put("/me/fcm-token", updateFcmToken);
+router.put("/me/location", updateMyLocation);
+router.get("/me/location", getMyLocation);
 
 export default router;

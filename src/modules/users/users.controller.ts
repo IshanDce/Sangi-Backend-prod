@@ -63,3 +63,45 @@ export const updateFcmToken = async (req: AuthRequest, res: Response): Promise<v
     res.status(500).json({ success: false, message: String(err) });
   }
 };
+
+// PUT /api/v1/users/me/location  — called by customer app every 3 minutes
+// Keeps last-known coords fresh so /staff/search can rank by real distance
+export const updateMyLocation = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { lat, lng } = req.body;
+    if (lat === undefined || lng === undefined || lat === null || lng === null) {
+      res.status(400).json({ success: false, message: "lat and lng are required" });
+      return;
+    }
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    if (Number.isNaN(latNum) || Number.isNaN(lngNum)) {
+      res.status(400).json({ success: false, message: "lat/lng must be numeric" });
+      return;
+    }
+    await User.findByIdAndUpdate(req.user!.id, {
+      lastKnownLat: latNum,
+      lastKnownLng: lngNum,
+      lastLocationUpdateAt: new Date(),
+    });
+    res.json({ success: true, message: "Location updated" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: String(err) });
+  }
+};
+
+// GET /api/v1/users/me/location  — fetch caller's last-known coords + age
+export const getMyLocation = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const user = await User.findById(req.user!.id).select("lastKnownLat lastKnownLng lastLocationUpdateAt");
+    if (!user) { res.status(404).json({ success: false, message: "User not found" }); return; }
+    res.json({
+      success: true,
+      lat: user.lastKnownLat ?? null,
+      lng: user.lastKnownLng ?? null,
+      updatedAt: user.lastLocationUpdateAt ?? null,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: String(err) });
+  }
+};

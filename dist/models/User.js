@@ -49,6 +49,9 @@ const UserSchema = new mongoose_1.Schema({
     isPhoneVerified: { type: Boolean, default: false },
     fcmToken: { type: String, default: null },
     walletBalance: { type: Number, default: 0 },
+    lastKnownLat: { type: Number, default: null },
+    lastKnownLng: { type: Number, default: null },
+    lastLocationUpdateAt: { type: Date, default: null },
 }, { timestamps: true });
 UserSchema.methods.comparePassword = async function (pw) {
     return bcryptjs_1.default.compare(pw, this.passwordHash);
