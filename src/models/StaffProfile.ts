@@ -78,9 +78,13 @@ const StaffProfileSchema = new Schema<IStaffProfile>(
       ifscCode: String,
       bankName: String,
     },
+    // No defaults here — `location` is only written when the staff app
+    // pushes a real GPS fix. A profile with no location has no `location`
+    // key at all (not even `type: "Point"`), so Mongo's 2dsphere index
+    // never sees a malformed GeoJSON doc.
     location: {
-      type: { type: String, enum: ['Point'], default: 'Point' },
-      coordinates: { type: [Number], default: undefined },
+      type: { type: String, enum: ['Point'] },
+      coordinates: { type: [Number] },
     },
     lastLocationUpdateAt: { type: Date, default: null },
   },
