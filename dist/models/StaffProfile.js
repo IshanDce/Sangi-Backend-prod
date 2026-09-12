@@ -74,8 +74,9 @@ const StaffProfileSchema = new mongoose_1.Schema({
     },
     location: {
         type: { type: String, enum: ['Point'], default: 'Point' },
-        coordinates: { type: [Number], default: [77.0266, 28.4595] },
+        coordinates: { type: [Number], default: undefined },
     },
+    lastLocationUpdateAt: { type: Date, default: null },
 }, { timestamps: true });
 StaffProfileSchema.index({ location: '2dsphere' }, { sparse: true });
 exports.StaffProfile = mongoose_1.default.model('StaffProfile', StaffProfileSchema);

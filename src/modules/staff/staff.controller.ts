@@ -15,6 +15,7 @@ export const registerStep1 = async (req: Request, res: Response): Promise<void> 
 
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await User.create({ fullName, email, phone, passwordHash, role: "staff" });
+    // No default coords — staff must push real GPS to appear in search
     const staffProfile = await StaffProfile.create({ userId: user._id, experience, about });
 
     res.status(201).json({ success: true, message: "Step 1 complete. Verify OTP.", userId: user._id, staffProfileId: staffProfile._id });
@@ -121,6 +122,17 @@ export const searchStaff = async (req: Request, res: Response): Promise<void> =>
 
     if (latitude !== undefined && longitude !== undefined) {
       const MAX_DISTANCE_METERS = 10000; // 10km
+      const STALE_MS = 30 * 60 * 1000; // 30 min — staff must have pushed location recently
+      const freshEnough = new Date(Date.now() - STALE_MS);
+
+      // Build match stage including service filter AND require a recent real
+      // location push — profiles still sitting on default coords or with no
+      // GPS update at all are excluded so customers don't see fake distances.
+      const geoMatch: Record<string, unknown> = {
+        ...matchStage,
+        lastLocationUpdateAt: { $gte: freshEnough },
+        location: { $exists: true, $ne: null },
+      };
 
       staffProfiles = await StaffProfile.aggregate([
         {
@@ -129,7 +141,7 @@ export const searchStaff = async (req: Request, res: Response): Promise<void> =>
             distanceField: "distMeters",
             maxDistance: MAX_DISTANCE_METERS,
             spherical: true,
-            query: matchStage,
+            query: geoMatch,
           },
         },
         { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "userInfo" } },
@@ -151,7 +163,16 @@ export const searchStaff = async (req: Request, res: Response): Promise<void> =>
         },
       ]);
     } else {
-      const profiles = await StaffProfile.find(matchStage)
+      // No customer coords → list KYC-approved staff with a recent location
+      // (still ranked without distance so the UI can show "—")
+      const STALE_MS = 30 * 60 * 1000;
+      const freshEnough = new Date(Date.now() - STALE_MS);
+
+      const profiles = await StaffProfile.find({
+        ...matchStage,
+        lastLocationUpdateAt: { $gte: freshEnough },
+        location: { $exists: true, $ne: null },
+      })
         .populate("userId", "fullName profilePhotoUrl")
         .limit(50);
 
@@ -254,7 +275,10 @@ export const updateMyLocation = async (req: AuthRequest, res: Response): Promise
     }
     await StaffProfile.findOneAndUpdate(
       { userId: req.user!.id },
-      { location: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] } },
+      {
+        location: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] },
+        lastLocationUpdateAt: new Date(),
+      },
       { new: true }
     );
     res.json({ success: true, message: "Location updated" });

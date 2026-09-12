@@ -63,6 +63,7 @@ export interface IStaffProfile extends Document {
         type: string;
         coordinates: number[];
     };
+    lastLocationUpdateAt?: Date;
 }
 export declare const StaffProfile: mongoose.Model<IStaffProfile, {}, {}, {}, Document<unknown, {}, IStaffProfile, {}, mongoose.DefaultSchemaOptions> & IStaffProfile & Required<{
     _id: mongoose.Types.ObjectId;

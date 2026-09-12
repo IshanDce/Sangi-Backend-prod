@@ -20,6 +20,7 @@ const registerStep1 = async (req, res) => {
         }
         const passwordHash = await bcryptjs_1.default.hash(password, 12);
         const user = await User_1.User.create({ fullName, email, phone, passwordHash, role: "staff" });
+        // No default coords — staff must push real GPS to appear in search
         const staffProfile = await StaffProfile_1.StaffProfile.create({ userId: user._id, experience, about });
         res.status(201).json({ success: true, message: "Step 1 complete. Verify OTP.", userId: user._id, staffProfileId: staffProfile._id });
     }
@@ -109,6 +110,16 @@ const searchStaff = async (req, res) => {
         let staffProfiles;
         if (latitude !== undefined && longitude !== undefined) {
             const MAX_DISTANCE_METERS = 10000; // 10km
+            const STALE_MS = 30 * 60 * 1000; // 30 min — staff must have pushed location recently
+            const freshEnough = new Date(Date.now() - STALE_MS);
+            // Build match stage including service filter AND require a recent real
+            // location push — profiles still sitting on default coords or with no
+            // GPS update at all are excluded so customers don't see fake distances.
+            const geoMatch = {
+                ...matchStage,
+                lastLocationUpdateAt: { $gte: freshEnough },
+                location: { $exists: true, $ne: null },
+            };
             staffProfiles = await StaffProfile_1.StaffProfile.aggregate([
                 {
                     $geoNear: {
@@ -116,7 +127,7 @@ const searchStaff = async (req, res) => {
                         distanceField: "distMeters",
                         maxDistance: MAX_DISTANCE_METERS,
                         spherical: true,
-                        query: matchStage,
+                        query: geoMatch,
                     },
                 },
                 { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "userInfo" } },
@@ -139,7 +150,15 @@ const searchStaff = async (req, res) => {
             ]);
         }
         else {
-            const profiles = await StaffProfile_1.StaffProfile.find(matchStage)
+            // No customer coords → list KYC-approved staff with a recent location
+            // (still ranked without distance so the UI can show "—")
+            const STALE_MS = 30 * 60 * 1000;
+            const freshEnough = new Date(Date.now() - STALE_MS);
+            const profiles = await StaffProfile_1.StaffProfile.find({
+                ...matchStage,
+                lastLocationUpdateAt: { $gte: freshEnough },
+                location: { $exists: true, $ne: null },
+            })
                 .populate("userId", "fullName profilePhotoUrl")
                 .limit(50);
             staffProfiles = profiles.map((p) => {
@@ -241,7 +260,10 @@ const updateMyLocation = async (req, res) => {
             res.status(400).json({ success: false, message: "lat and lng are required" });
             return;
         }
-        await StaffProfile_1.StaffProfile.findOneAndUpdate({ userId: req.user.id }, { location: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] } }, { new: true });
+        await StaffProfile_1.StaffProfile.findOneAndUpdate({ userId: req.user.id }, {
+            location: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] },
+            lastLocationUpdateAt: new Date(),
+        }, { new: true });
         res.json({ success: true, message: "Location updated" });
     }
     catch (err) {

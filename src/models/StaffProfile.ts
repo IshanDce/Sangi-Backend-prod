@@ -38,7 +38,11 @@ export interface IStaffProfile extends Document {
     ifscCode?: string;
     bankName?: string;
   };
+  // Live location — only set when staff app pushes real GPS.
+  // Schema has NO default coords so a profile without a real push has
+  // `location: undefined` and is naturally excluded from nearby search.
   location?: { type: string; coordinates: number[] };
+  lastLocationUpdateAt?: Date;
 }
 
 const StaffProfileSchema = new Schema<IStaffProfile>(
@@ -76,8 +80,9 @@ const StaffProfileSchema = new Schema<IStaffProfile>(
     },
     location: {
       type: { type: String, enum: ['Point'], default: 'Point' },
-      coordinates: { type: [Number], default: [77.0266, 28.4595] },
+      coordinates: { type: [Number], default: undefined },
     },
+    lastLocationUpdateAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
