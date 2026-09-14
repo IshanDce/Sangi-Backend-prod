@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateMyLocation = exports.updateBankAccount = exports.updateMyAvailability = exports.updateMyServices = exports.updateMyProfile = exports.getStaffProfile = exports.searchStaff = exports.registerStep4Kyc = exports.registerStep3Availability = exports.registerStep2Services = exports.registerStep1 = void 0;
+exports.updateMyLocation = exports.updateBankAccount = exports.updateMyAvailability = exports.updateMyServices = exports.updateMyProfile = exports.getMyProfile = exports.getStaffProfile = exports.searchStaff = exports.registerStep4Kyc = exports.registerStep3Availability = exports.registerStep2Services = exports.registerStep1 = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const User_1 = require("../../models/User");
 const StaffProfile_1 = require("../../models/StaffProfile");
@@ -219,7 +219,31 @@ const getStaffProfile = async (req, res) => {
     }
 };
 exports.getStaffProfile = getStaffProfile;
-// ─── PUT /api/v1/staff/me/profile
+// ─── GET /api/v1/staff/me/profile  (staff sees their own full profile for editing)
+const getMyProfile = async (req, res) => {
+    try {
+        const profile = await StaffProfile_1.StaffProfile.findOne({ userId: req.user.id }).populate("userId", "fullName profilePhotoUrl email phone");
+        if (!profile) {
+            res.status(404).json({ success: false, message: "Staff profile not found" });
+            return;
+        }
+        const profileObj = profile.toObject();
+        const userObj = profileObj.userId;
+        const flatProfile = {
+            ...profileObj,
+            fullName: userObj?.fullName,
+            profilePhotoUrl: userObj?.profilePhotoUrl,
+            email: userObj?.email,
+            phone: userObj?.phone,
+            isKycVerified: profileObj.kycStatus === "approved",
+        };
+        res.json({ success: true, profile: flatProfile });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+    }
+};
+exports.getMyProfile = getMyProfile;
 const updateMyProfile = async (req, res) => {
     try {
         const { title, about, serviceArea } = req.body;

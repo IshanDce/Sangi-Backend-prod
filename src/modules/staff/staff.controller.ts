@@ -233,7 +233,30 @@ export const getStaffProfile = async (req: Request, res: Response): Promise<void
   }
 };
 
-// ─── PUT /api/v1/staff/me/profile
+// ─── GET /api/v1/staff/me/profile  (staff sees their own full profile for editing)
+export const getMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const profile = await StaffProfile.findOne({ userId: req.user!.id }).populate("userId", "fullName profilePhotoUrl email phone");
+    if (!profile) { res.status(404).json({ success: false, message: "Staff profile not found" }); return; }
+
+    const profileObj = profile.toObject() as unknown as Record<string, unknown>;
+    const userObj = profileObj.userId as Record<string, unknown> | undefined;
+    const flatProfile = {
+      ...profileObj,
+      fullName: userObj?.fullName,
+      profilePhotoUrl: userObj?.profilePhotoUrl,
+      email: userObj?.email,
+      phone: userObj?.phone,
+      isKycVerified: profileObj.kycStatus === "approved",
+    };
+
+    res.json({ success: true, profile: flatProfile });
+  } catch (err) {
+    res.status(500).json({ success: false, message: String(err) });
+  }
+};
+
+
 export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { title, about, serviceArea } = req.body;

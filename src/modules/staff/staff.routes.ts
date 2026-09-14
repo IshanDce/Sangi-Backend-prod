@@ -1,9 +1,10 @@
 import { Router } from "express";
 import {
   registerStep1, registerStep2Services, registerStep3Availability, registerStep4Kyc,
-  searchStaff, getStaffProfile, updateMyProfile, updateMyServices, updateMyAvailability,
+  searchStaff, getStaffProfile, getMyProfile, updateMyProfile, updateMyServices, updateMyAvailability,
   updateBankAccount, updateMyLocation,
 } from "./staff.controller";
+
 import { protect, requireRole } from "../../middleware/auth";
 import { upload } from "../../middleware/upload";
 
@@ -25,6 +26,8 @@ router.post(
   registerStep4Kyc
 );
 router.put("/me/profile", protect, requireRole("staff"), updateMyProfile);
+router.get("/me/profile", protect, requireRole("staff"), getMyProfile);
+
 router.put("/me/services", protect, requireRole("staff"), updateMyServices);
 router.put("/me/availability", protect, requireRole("staff"), updateMyAvailability);
 router.put("/me/bank-account", protect, requireRole("staff"), updateBankAccount);

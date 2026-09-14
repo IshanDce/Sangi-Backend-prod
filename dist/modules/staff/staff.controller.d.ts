@@ -6,6 +6,7 @@ export declare const registerStep3Availability: (req: AuthRequest, res: Response
 export declare const registerStep4Kyc: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const searchStaff: (req: Request, res: Response) => Promise<void>;
 export declare const getStaffProfile: (req: Request, res: Response) => Promise<void>;
+export declare const getMyProfile: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const updateMyProfile: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const updateMyServices: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const updateMyAvailability: (req: AuthRequest, res: Response) => Promise<void>;
