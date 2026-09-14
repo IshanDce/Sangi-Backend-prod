@@ -1,5 +1,6 @@
 import { getMessaging } from '../config/firebase';
 import { Notification } from '../models/Notification';
+import { User } from '../models/User';
 import mongoose from 'mongoose';
 
 interface PushPayload {
@@ -37,7 +38,24 @@ export const sendPushNotification = async (payload: PushPayload): Promise<void> 
       android: { priority: 'high' },
       apns: { payload: { aps: { sound: 'default' } } },
     });
-  } catch (err) {
-    console.error('FCM send failed:', err);
+  } catch (err: any) {
+    const isUnregistered =
+      err?.code === 'messaging/registration-token-not-registered' ||
+      err?.code === 'messaging/invalid-registration-token' ||
+      err?.errorInfo?.code === 'messaging/registration-token-not-registered' ||
+      err?.message?.includes('NotRegistered') ||
+      err?.message?.includes('UNREGISTERED') ||
+      err?.cause?.response?.status === 404;
+
+    if (isUnregistered) {
+      console.warn(`[FCM] Stale/unregistered token for user ${payload.userId} detected. Clearing token from DB.`);
+      try {
+        await User.findByIdAndUpdate(payload.userId, { $unset: { fcmToken: 1 } });
+      } catch (dbErr) {
+        console.error('[FCM] Failed to clear stale token from user document:', dbErr);
+      }
+    } else {
+      console.error('FCM send failed:', err);
+    }
   }
 };

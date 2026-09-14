@@ -31,15 +31,20 @@ const createOrder = async (req, res) => {
         });
         let order;
         try {
-            order = await razorpay_1.razorpay.orders.create({
-                amount: BOOKING_FEE * 100, // paise
-                currency: "INR",
-                receipt: String(booking._id),
-            });
+            if ((0, razorpay_2.isMockMode)()) {
+                order = { id: `order_mock_${booking._id}_${Date.now()}` };
+            }
+            else {
+                order = await razorpay_1.razorpay.orders.create({
+                    amount: BOOKING_FEE * 100, // paise
+                    currency: "INR",
+                    receipt: String(booking._id),
+                });
+            }
         }
         catch (rzpErr) {
             console.warn("[Razorpay] Order creation fallback to mock order ID:", String(rzpErr));
-            order = { id: `order_mock_${Date.now()}` };
+            order = { id: `order_mock_${booking._id}_${Date.now()}` };
         }
         res.status(201).json({
             success: true,
@@ -435,15 +440,20 @@ const createServicePaymentOrder = async (req, res) => {
         }
         let order;
         try {
-            order = await razorpay_1.razorpay.orders.create({
-                amount: booking.totalServiceAmount * 100,
-                currency: "INR",
-                receipt: `svc_${String(booking._id)}`,
-            });
+            if ((0, razorpay_2.isMockMode)()) {
+                order = { id: `order_mock_${booking._id}_${Date.now()}` };
+            }
+            else {
+                order = await razorpay_1.razorpay.orders.create({
+                    amount: booking.totalServiceAmount * 100,
+                    currency: "INR",
+                    receipt: `svc_${String(booking._id)}`,
+                });
+            }
         }
         catch (rzpErr) {
             console.warn("[Razorpay] Order creation fallback to mock order ID:", String(rzpErr));
-            order = { id: `order_mock_${Date.now()}` };
+            order = { id: `order_mock_${booking._id}_${Date.now()}` };
         }
         res.json({ success: true, razorpayOrderId: order.id, amount: booking.totalServiceAmount });
     }
