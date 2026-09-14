@@ -55,10 +55,14 @@ exports.updatePhoto = updatePhoto;
 const updateFcmToken = async (req, res) => {
     try {
         const { fcmToken } = req.body;
-        await User_1.User.findByIdAndUpdate(req.user.id, { fcmToken });
+        const userId = req.user.id;
+        console.log(`[FCM] updateFcmToken called — userId=${userId} token=${fcmToken ? fcmToken.substring(0, 20) + '...' : '(empty/null)'}`);
+        await User_1.User.findByIdAndUpdate(userId, { fcmToken });
+        console.log(`[FCM] Token saved to DB for userId=${userId}`);
         res.json({ success: true, message: "FCM token updated" });
     }
     catch (err) {
+        console.error('[FCM] updateFcmToken error:', err);
         res.status(500).json({ success: false, message: String(err) });
     }
 };

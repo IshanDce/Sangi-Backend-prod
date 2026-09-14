@@ -9,21 +9,34 @@ const Notification_1 = require("../models/Notification");
 const User_1 = require("../models/User");
 const mongoose_1 = __importDefault(require("mongoose"));
 const sendPushNotification = async (payload) => {
+    console.log(`[FCM] 🔔 sendPushNotification called — userId=${payload.userId} type=${payload.type} title="${payload.title}"`);
+    console.log(`[FCM] 🔑 fcmToken=${payload.fcmToken ? payload.fcmToken.substring(0, 30) + '...' : '(NULL/EMPTY — notification will NOT be sent)'}`);
     // Always save notification in DB
-    await Notification_1.Notification.create({
-        userId: new mongoose_1.default.Types.ObjectId(payload.userId),
-        title: payload.title,
-        message: payload.body,
-        type: payload.type,
-        metadata: payload.metadata ?? undefined,
-    });
+    try {
+        await Notification_1.Notification.create({
+            userId: new mongoose_1.default.Types.ObjectId(payload.userId),
+            title: payload.title,
+            message: payload.body,
+            type: payload.type,
+            metadata: payload.metadata ?? undefined,
+        });
+        console.log(`[FCM] ✅ Notification saved to DB for userId=${payload.userId}`);
+    }
+    catch (dbErr) {
+        console.error(`[FCM] ❌ Failed to save notification to DB:`, dbErr);
+    }
     // Send FCM only if FCM token exists
-    if (!payload.fcmToken)
+    if (!payload.fcmToken) {
+        console.warn(`[FCM] ⚠️  No fcmToken for userId=${payload.userId} — skipping push. User needs to login on device to register token.`);
         return;
+    }
     try {
         const messaging = (0, firebase_1.getMessaging)();
-        if (!messaging)
-            return; // Firebase not configured yet
+        if (!messaging) {
+            console.error('[FCM] ❌ Firebase messaging not initialized — check service account credentials on VPS');
+            return;
+        }
+        console.log(`[FCM] 🚀 Sending push to token ${payload.fcmToken.substring(0, 30)}...`);
         await messaging.send({
             token: payload.fcmToken,
             notification: { title: payload.title, body: payload.body },
@@ -34,6 +47,7 @@ const sendPushNotification = async (payload) => {
             android: { priority: 'high' },
             apns: { payload: { aps: { sound: 'default' } } },
         });
+        console.log(`[FCM] ✅✅ Push notification SENT successfully to userId=${payload.userId}`);
     }
     catch (err) {
         const isUnregistered = err?.code === 'messaging/registration-token-not-registered' ||
@@ -43,16 +57,18 @@ const sendPushNotification = async (payload) => {
             err?.message?.includes('UNREGISTERED') ||
             err?.cause?.response?.status === 404;
         if (isUnregistered) {
-            console.warn(`[FCM] Stale/unregistered token for user ${payload.userId} detected. Clearing token from DB.`);
+            console.warn(`[FCM] ⚠️  Stale/unregistered token for userId=${payload.userId}. Token has expired. Clearing from DB.`);
             try {
                 await User_1.User.findByIdAndUpdate(payload.userId, { $unset: { fcmToken: 1 } });
+                console.log(`[FCM] ✅ Stale token cleared from DB for userId=${payload.userId}`);
             }
             catch (dbErr) {
-                console.error('[FCM] Failed to clear stale token from user document:', dbErr);
+                console.error('[FCM] Failed to clear stale token:', dbErr);
             }
         }
         else {
-            console.error('FCM send failed:', err);
+            console.error(`[FCM] ❌ Push send FAILED for userId=${payload.userId}:`, err?.message || err);
+            console.error(`[FCM] Error code: ${err?.code} | errorInfo: ${JSON.stringify(err?.errorInfo)}`);
         }
     }
 };
