@@ -13,9 +13,8 @@ const router = Router();
 // Public
 router.post("/register/step1", registerStep1);
 router.get("/search", protect, searchStaff);
-router.get("/:staffId/profile", protect, getStaffProfile);
 
-// Staff-only
+// Staff-only (Must be defined BEFORE /:staffId/profile)
 router.put("/register/step2-services", protect, requireRole("staff"), registerStep2Services);
 router.put("/register/step3-availability", protect, requireRole("staff"), registerStep3Availability);
 router.post(
@@ -25,12 +24,14 @@ router.post(
   upload.fields([{ name: "aadhaarFront" }, { name: "aadhaarBack" }, { name: "panCard" }]),
   registerStep4Kyc
 );
-router.put("/me/profile", protect, requireRole("staff"), updateMyProfile);
 router.get("/me/profile", protect, requireRole("staff"), getMyProfile);
-
+router.put("/me/profile", protect, requireRole("staff"), updateMyProfile);
 router.put("/me/services", protect, requireRole("staff"), updateMyServices);
 router.put("/me/availability", protect, requireRole("staff"), updateMyAvailability);
 router.put("/me/bank-account", protect, requireRole("staff"), updateBankAccount);
 router.put("/me/location", protect, requireRole("staff"), updateMyLocation);
+
+// Parameterized staff profile route (must come after /me/*)
+router.get("/:staffId/profile", protect, getStaffProfile);
 
 export default router;

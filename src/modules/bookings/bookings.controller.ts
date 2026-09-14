@@ -21,6 +21,37 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
   try {
     const { staffId, service, date, timeSlot, location, lat, lng, notes } = req.body;
 
+    // Validate staff profile and availability
+    const staffProfile = await StaffProfile.findOne({ userId: staffId });
+    if (!staffProfile) {
+      res.status(404).json({ success: false, message: "Selected staff member not found" });
+      return;
+    }
+
+    // Check if staff offers the requested service
+    if (service && staffProfile.services && staffProfile.services.length > 0) {
+      if (!staffProfile.services.includes(service)) {
+        res.status(400).json({ success: false, message: "Staff does not provide this service" });
+        return;
+      }
+    }
+
+    // Check staff availability for the requested day
+    if (date && staffProfile.availability) {
+      const bookingDate = new Date(date);
+      const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const dayName = days[bookingDate.getDay()];
+      const dayAvail = (staffProfile.availability as any)[dayName];
+      if (dayAvail && dayAvail.isAvailable === false) {
+        const dayCap = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+        res.status(400).json({
+          success: false,
+          message: `Staff is not available on ${dayCap}s`,
+        });
+        return;
+      }
+    }
+
     const booking = await Booking.create({
       customerId: req.user!.id,
       staffId,
