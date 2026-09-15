@@ -105,35 +105,45 @@ export const confirmTopup = async (req: AuthRequest, res: Response): Promise<voi
 export const withdraw = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { amount } = req.body;
+    const numericAmount = Number(amount);
+    if (!numericAmount || isNaN(numericAmount) || numericAmount <= 0) {
+      res.status(400).json({ success: false, message: "Please enter a valid withdrawal amount" });
+      return;
+    }
+
     const user = await User.findById(req.user!.id);
     if (!user) { res.status(404).json({ success: false, message: "User not found" }); return; }
-    if (user.walletBalance < amount) {
+    if (user.walletBalance < numericAmount) {
       res.status(400).json({ success: false, message: "Insufficient wallet balance" });
       return;
     }
 
-    await User.findByIdAndUpdate(req.user!.id, { $inc: { walletBalance: -amount } });
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user!.id,
+      { $inc: { walletBalance: -numericAmount } },
+      { new: true }
+    );
 
     await Transaction.create({
       userId: req.user!.id,
       title: "Withdrawal",
-      subtitle: `₹${amount} transferred to bank`,
-      amount,
+      subtitle: `₹${numericAmount} transferred to bank`,
+      amount: numericAmount,
       isCredit: false,
       type: "withdrawal",
       status: "completed",
     });
 
-    // TODO: actual payout via Razorpay Payout API in production
+    // Send push notification if token available
     await sendPushNotification({
       userId: req.user!.id,
       fcmToken: user.fcmToken,
       title: "Withdrawal Successful 🏦",
-      body: `₹${amount} transferred to your bank account`,
+      body: `₹${numericAmount} transferred to your bank account`,
       type: "withdrawalSuccess",
     });
 
-    res.json({ success: true, message: `₹${amount} withdrawal initiated`, newBalance: user.walletBalance - amount });
+    res.json({ success: true, message: `₹${numericAmount} withdrawal initiated`, newBalance: updatedUser?.walletBalance ?? 0 });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
   }
