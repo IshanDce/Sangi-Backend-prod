@@ -373,6 +373,8 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
     if (!booking) { res.status(404).json({ success: false, message: "Booking not found" }); return; }
 
     const amount = booking.totalServiceAmount!;
+    const commission = amount * 0.25;
+    const staffAmount = amount * 0.75;
 
     if (method === "wallet") {
       const customer = await User.findById(req.user!.id);
@@ -398,10 +400,10 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
       },
     });
 
-    // Credit staff wallet
-    await User.findByIdAndUpdate(booking.staffId, { $inc: { walletBalance: amount } });
+    // Credit staff wallet with 75%
+    await User.findByIdAndUpdate(booking.staffId, { $inc: { walletBalance: staffAmount } });
 
-    // Transactions
+    // Transactions (3 records)
     await Transaction.create([
       {
         userId: req.user!.id,
@@ -419,11 +421,21 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
         bookingId: booking._id,
         title: "Payment Received",
         subtitle: `${booking.service} - ${booking.bookingNumber}`,
-        amount,
+        amount: staffAmount,
         isCredit: true,
         type: "servicePayment",
         status: "completed",
         razorpayRef: razorpayPaymentId,
+      },
+      {
+        userId: booking.staffId,
+        bookingId: booking._id,
+        title: "Platform Commission",
+        subtitle: `25% SANGI fee - ${booking.bookingNumber}`,
+        amount: commission,
+        isCredit: false,
+        type: "adjustment",
+        status: "completed",
       },
     ]);
 
@@ -433,9 +445,9 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
       userId: String(booking.staffId),
       fcmToken: staff?.fcmToken,
       title: "Payment Received 🎉",
-      body: `₹${amount} received for ${booking.service} service!`,
+      body: `₹${staffAmount} received for ${booking.service} service!`,
       type: "paymentReceived",
-      metadata: { bookingId: String(booking._id), amount },
+      metadata: { bookingId: String(booking._id), amount: staffAmount },
     });
 
     res.json({ success: true, message: "Payment successful" });
