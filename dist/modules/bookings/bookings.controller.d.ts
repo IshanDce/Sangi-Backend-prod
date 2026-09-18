@@ -13,3 +13,4 @@ export declare const completeService: (req: AuthRequest, res: Response) => Promi
 export declare const payServiceFee: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const completeBookingWithReview: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const createServicePaymentOrder: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getStaffAvailability: (req: AuthRequest, res: Response) => Promise<void>;

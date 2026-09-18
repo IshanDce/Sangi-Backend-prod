@@ -19,6 +19,8 @@ router.put("/:bookingId/accept", (0, auth_1.requireRole)("staff"), bookings_cont
 router.put("/:bookingId/decline", (0, auth_1.requireRole)("staff"), bookings_controller_1.declineBooking);
 router.put("/:bookingId/start", (0, auth_1.requireRole)("staff"), bookings_controller_1.startService);
 router.put("/:bookingId/complete", (0, auth_1.requireRole)("staff"), bookings_controller_1.completeService);
+// Staff availability (used by customer booking form)
+router.get("/staff-availability", bookings_controller_1.getStaffAvailability);
 // Shared
 router.get("/:bookingId", bookings_controller_1.getBookingById);
 exports.default = router;

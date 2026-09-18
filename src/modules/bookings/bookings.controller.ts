@@ -1,4 +1,4 @@
-import { Response } from "express";
+﻿import { Response } from "express";
 import { AuthRequest } from "../../middleware/auth";
 import { Booking } from "../../models/Booking";
 import { Transaction } from "../../models/Transaction";
@@ -8,6 +8,7 @@ import { User } from "../../models/User";
 import { razorpay } from "../../config/razorpay";
 import { verifyRazorpaySignature, isMockMode } from "../../utils/razorpay";
 import { sendPushNotification } from "../../utils/fcm";
+import { parseSlotToMinutes, slotsOverlap, suggestAvailableSlots, SLOT_OCCUPYING_STATUSES } from "../../utils/timeSlot";
 
 const BOOKING_FEE = 30;
 
@@ -15,8 +16,8 @@ const BOOKING_FEE = 30;
 const isContactRevealed = (status: string) =>
   ["accepted", "ongoing", "serviceCompleted", "paymentPending", "paymentCompleted", "completed"].includes(status);
 
-// ─── POST /api/v1/bookings/create-order
-// Creates a draft booking + Razorpay order for ₹30 booking fee
+// â”€â”€â”€ POST /api/v1/bookings/create-order
+// Creates a draft booking + Razorpay order for â‚¹30 booking fee
 export const createOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { staffId, service, date, timeSlot, location, lat, lng, notes } = req.body;
@@ -51,6 +52,34 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
         return;
       }
     }
+
+    // ── Time-slot conflict check ──────────────────────────────────────────────
+    {
+      const dateStart = new Date(date); dateStart.setHours(0, 0, 0, 0);
+      const dateEnd   = new Date(date); dateEnd.setHours(23, 59, 59, 999);
+      const existingBookings = await Booking.find({
+        staffId,
+        date:   { $gte: dateStart, $lte: dateEnd },
+        status: { $in: SLOT_OCCUPYING_STATUSES },
+      } as any);
+      const reqSlot = parseSlotToMinutes(timeSlot);
+      for (const eb of existingBookings) {
+        const ebSlot = parseSlotToMinutes(eb.timeSlot);
+        if (slotsOverlap(reqSlot, ebSlot)) {
+          const busySlots = existingBookings.map((b) => parseSlotToMinutes(b.timeSlot));
+          const suggestedSlots = suggestAvailableSlots(busySlots, 8 * 60, 20 * 60, 120, 60, 5);
+          res.status(409).json({
+            success: false,
+            errorCode: "TIME_SLOT_CONFLICT",
+            message: `Staff is not available at ${timeSlot}. Please choose another time.`,
+            conflictingSlot: eb.timeSlot,
+            suggestedSlots,
+          });
+          return;
+        }
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const booking = await Booking.create({
       customerId: req.user!.id,
@@ -93,8 +122,8 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
   }
 };
 
-// ─── POST /api/v1/bookings/confirm-payment
-// Verify Razorpay booking fee payment → status: requested → FCM to staff
+// â”€â”€â”€ POST /api/v1/bookings/confirm-payment
+// Verify Razorpay booking fee payment â†’ status: requested â†’ FCM to staff
 export const confirmBookingPayment = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { bookingId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
@@ -132,7 +161,7 @@ export const confirmBookingPayment = async (req: AuthRequest, res: Response): Pr
       await sendPushNotification({
         userId: String(booking.staffId),
         fcmToken: staff.fcmToken,
-        title: "New Booking Request 🔔",
+        title: "New Booking Request ðŸ””",
         body: `${customer?.fullName} wants ${booking.service} on ${new Date(booking.date).toDateString()} at ${booking.timeSlot}`,
         type: "newBookingRequest",
         metadata: { bookingId: String(booking._id) },
@@ -145,7 +174,7 @@ export const confirmBookingPayment = async (req: AuthRequest, res: Response): Pr
   }
 };
 
-// ─── GET /api/v1/bookings/customer
+// â”€â”€â”€ GET /api/v1/bookings/customer
 export const getCustomerBookings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { status } = req.query;
@@ -169,7 +198,7 @@ export const getCustomerBookings = async (req: AuthRequest, res: Response): Prom
   }
 };
 
-// ─── GET /api/v1/bookings/staff
+// â”€â”€â”€ GET /api/v1/bookings/staff
 export const getStaffBookings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { status } = req.query;
@@ -203,7 +232,7 @@ export const getStaffBookings = async (req: AuthRequest, res: Response): Promise
   }
 };
 
-// ─── GET /api/v1/bookings/:bookingId
+// â”€â”€â”€ GET /api/v1/bookings/:bookingId
 export const getBookingById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const booking = await Booking.findById(req.params.bookingId)
@@ -227,7 +256,7 @@ export const getBookingById = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-// ─── PUT /api/v1/bookings/:bookingId/accept
+// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/accept
 export const acceptBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const booking = await Booking.findByIdAndUpdate(
@@ -243,7 +272,7 @@ export const acceptBooking = async (req: AuthRequest, res: Response): Promise<vo
     await sendPushNotification({
       userId: String(booking.customerId),
       fcmToken: customer?.fcmToken,
-      title: "Booking Accepted ✅",
+      title: "Booking Accepted âœ…",
       body: `${staff?.fullName} accepted your ${booking.service} request`,
       type: "bookingAccepted",
       metadata: { bookingId: String(booking._id) },
@@ -255,7 +284,7 @@ export const acceptBooking = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
-// ─── PUT /api/v1/bookings/:bookingId/decline
+// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/decline
 export const declineBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const booking = await Booking.findByIdAndUpdate(
@@ -265,7 +294,7 @@ export const declineBooking = async (req: AuthRequest, res: Response): Promise<v
     );
     if (!booking) { res.status(404).json({ success: false, message: "Booking not found" }); return; }
 
-    // Refund ₹30 to customer wallet
+    // Refund â‚¹30 to customer wallet
     await User.findByIdAndUpdate(booking.customerId, { $inc: { walletBalance: BOOKING_FEE } });
     await Transaction.create({
       userId: booking.customerId,
@@ -282,8 +311,8 @@ export const declineBooking = async (req: AuthRequest, res: Response): Promise<v
     await sendPushNotification({
       userId: String(booking.customerId),
       fcmToken: customer?.fcmToken,
-      title: "Booking Declined ❌",
-      body: `Your booking was declined. ₹${BOOKING_FEE} refunded to wallet.`,
+      title: "Booking Declined âŒ",
+      body: `Your booking was declined. â‚¹${BOOKING_FEE} refunded to wallet.`,
       type: "bookingDeclined",
       metadata: { bookingId: String(booking._id) },
     });
@@ -294,7 +323,7 @@ export const declineBooking = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-// ─── PUT /api/v1/bookings/:bookingId/cancel
+// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/cancel
 export const cancelBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const booking = await Booking.findByIdAndUpdate(
@@ -310,7 +339,7 @@ export const cancelBooking = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
-// ─── PUT /api/v1/bookings/:bookingId/start
+// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/start
 export const startService = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const booking = await Booking.findByIdAndUpdate(
@@ -324,7 +353,7 @@ export const startService = async (req: AuthRequest, res: Response): Promise<voi
     await sendPushNotification({
       userId: String(booking.customerId),
       fcmToken: customer?.fcmToken,
-      title: "Service Started 🛠️",
+      title: "Service Started ðŸ› ï¸",
       body: `Your ${booking.service} service has started`,
       type: "serviceStarted",
       metadata: { bookingId: String(booking._id) },
@@ -336,7 +365,7 @@ export const startService = async (req: AuthRequest, res: Response): Promise<voi
   }
 };
 
-// ─── PUT /api/v1/bookings/:bookingId/complete  (Staff submits bill)
+// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/complete  (Staff submits bill)
 export const completeService = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { serviceCharge, additionalCharge } = req.body;
@@ -353,8 +382,8 @@ export const completeService = async (req: AuthRequest, res: Response): Promise<
     await sendPushNotification({
       userId: String(booking.customerId),
       fcmToken: customer?.fcmToken,
-      title: "Task Completed! 💰",
-      body: `Pay ₹${total} to complete your ${booking.service} booking`,
+      title: "Task Completed! ðŸ’°",
+      body: `Pay â‚¹${total} to complete your ${booking.service} booking`,
       type: "paymentPending",
       metadata: { bookingId: String(booking._id), amount: total },
     });
@@ -365,7 +394,7 @@ export const completeService = async (req: AuthRequest, res: Response): Promise<
   }
 };
 
-// ─── POST /api/v1/bookings/:bookingId/pay-service  (Customer pays staff fee)
+// â”€â”€â”€ POST /api/v1/bookings/:bookingId/pay-service  (Customer pays staff fee)
 export const payServiceFee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { method, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
@@ -444,8 +473,8 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
     await sendPushNotification({
       userId: String(booking.staffId),
       fcmToken: staff?.fcmToken,
-      title: "Payment Received 🎉",
-      body: `₹${staffAmount} received for ${booking.service} service!`,
+      title: "Payment Received ðŸŽ‰",
+      body: `â‚¹${staffAmount} received for ${booking.service} service!`,
       type: "paymentReceived",
       metadata: { bookingId: String(booking._id), amount: staffAmount },
     });
@@ -456,7 +485,7 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
-// ─── PUT /api/v1/bookings/:bookingId/complete-booking  (Customer submits review → Booking completed)
+// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/complete-booking  (Customer submits review â†’ Booking completed)
 export const completeBookingWithReview = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { rating, comment, tags } = req.body;
@@ -491,7 +520,7 @@ export const completeBookingWithReview = async (req: AuthRequest, res: Response)
   }
 };
 
-// ─── POST /api/v1/bookings/create-service-order  (For Razorpay service payment)
+// â”€â”€â”€ POST /api/v1/bookings/create-service-order  (For Razorpay service payment)
 export const createServicePaymentOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { bookingId } = req.body;
@@ -520,3 +549,33 @@ export const createServicePaymentOrder = async (req: AuthRequest, res: Response)
     res.status(500).json({ success: false, message: String(err) });
   }
 };
+
+// ─── GET /api/v1/bookings/staff-availability ─────────────────────────────────
+export const getStaffAvailability = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { staffId, date } = req.query as { staffId?: string; date?: string };
+    if (!staffId || !date) {
+      res.status(400).json({ success: false, message: "staffId and date are required" });
+      return;
+    }
+    const dateStart = new Date(date); dateStart.setHours(0, 0, 0, 0);
+    const dateEnd   = new Date(date); dateEnd.setHours(23, 59, 59, 999);
+    const bookings = await Booking.find({
+      staffId,
+      date: { ['$gte']: dateStart, ['$lte']: dateEnd },
+      status: { ['$in']: SLOT_OCCUPYING_STATUSES },
+    } as any).select("timeSlot status");
+    const busyRanges = bookings.map((b) => parseSlotToMinutes(b.timeSlot));
+    const suggested = suggestAvailableSlots(busyRanges, 8 * 60, 20 * 60, 120, 60, 8);
+    res.json({
+      success: true,
+      date,
+      staffId,
+      busySlots: bookings.map((b) => ({ timeSlot: b.timeSlot, status: b.status })),
+      suggestedSlots: suggested,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: String(err) });
+  }
+};
+

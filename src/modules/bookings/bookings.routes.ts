@@ -1,9 +1,9 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import {
   createOrder, confirmBookingPayment, getCustomerBookings, getStaffBookings,
   getBookingById, acceptBooking, declineBooking, cancelBooking,
   startService, completeService, payServiceFee, completeBookingWithReview,
-  createServicePaymentOrder,
+  createServicePaymentOrder, getStaffAvailability,
 } from "./bookings.controller";
 import { protect, requireRole } from "../../middleware/auth";
 
@@ -27,7 +27,11 @@ router.put("/:bookingId/decline", requireRole("staff"), declineBooking);
 router.put("/:bookingId/start", requireRole("staff"), startService);
 router.put("/:bookingId/complete", requireRole("staff"), completeService);
 
+// Staff availability (used by customer booking form)
+router.get("/staff-availability", getStaffAvailability);
+
 // Shared
 router.get("/:bookingId", getBookingById);
 
 export default router;
+

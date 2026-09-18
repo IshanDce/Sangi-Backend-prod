@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createServicePaymentOrder = exports.completeBookingWithReview = exports.payServiceFee = exports.completeService = exports.startService = exports.cancelBooking = exports.declineBooking = exports.acceptBooking = exports.getBookingById = exports.getStaffBookings = exports.getCustomerBookings = exports.confirmBookingPayment = exports.createOrder = void 0;
+exports.getStaffAvailability = exports.createServicePaymentOrder = exports.completeBookingWithReview = exports.payServiceFee = exports.completeService = exports.startService = exports.cancelBooking = exports.declineBooking = exports.acceptBooking = exports.getBookingById = exports.getStaffBookings = exports.getCustomerBookings = exports.confirmBookingPayment = exports.createOrder = void 0;
 const Booking_1 = require("../../models/Booking");
 const Transaction_1 = require("../../models/Transaction");
 const Review_1 = require("../../models/Review");
@@ -9,11 +9,12 @@ const User_1 = require("../../models/User");
 const razorpay_1 = require("../../config/razorpay");
 const razorpay_2 = require("../../utils/razorpay");
 const fcm_1 = require("../../utils/fcm");
+const timeSlot_1 = require("../../utils/timeSlot");
 const BOOKING_FEE = 30;
 // Helper: check if phones should be revealed
 const isContactRevealed = (status) => ["accepted", "ongoing", "serviceCompleted", "paymentPending", "paymentCompleted", "completed"].includes(status);
-// ─── POST /api/v1/bookings/create-order
-// Creates a draft booking + Razorpay order for ₹30 booking fee
+// â”€â”€â”€ POST /api/v1/bookings/create-order
+// Creates a draft booking + Razorpay order for â‚¹30 booking fee
 const createOrder = async (req, res) => {
     try {
         const { staffId, service, date, timeSlot, location, lat, lng, notes } = req.body;
@@ -45,6 +46,35 @@ const createOrder = async (req, res) => {
                 return;
             }
         }
+        // ── Time-slot conflict check ──────────────────────────────────────────────
+        {
+            const dateStart = new Date(date);
+            dateStart.setHours(0, 0, 0, 0);
+            const dateEnd = new Date(date);
+            dateEnd.setHours(23, 59, 59, 999);
+            const existingBookings = await Booking_1.Booking.find({
+                staffId,
+                date: { $gte: dateStart, $lte: dateEnd },
+                status: { $in: timeSlot_1.SLOT_OCCUPYING_STATUSES },
+            });
+            const reqSlot = (0, timeSlot_1.parseSlotToMinutes)(timeSlot);
+            for (const eb of existingBookings) {
+                const ebSlot = (0, timeSlot_1.parseSlotToMinutes)(eb.timeSlot);
+                if ((0, timeSlot_1.slotsOverlap)(reqSlot, ebSlot)) {
+                    const busySlots = existingBookings.map((b) => (0, timeSlot_1.parseSlotToMinutes)(b.timeSlot));
+                    const suggestedSlots = (0, timeSlot_1.suggestAvailableSlots)(busySlots, 8 * 60, 20 * 60, 120, 60, 5);
+                    res.status(409).json({
+                        success: false,
+                        errorCode: "TIME_SLOT_CONFLICT",
+                        message: `Staff is not available at ${timeSlot}. Please choose another time.`,
+                        conflictingSlot: eb.timeSlot,
+                        suggestedSlots,
+                    });
+                    return;
+                }
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────────
         const booking = await Booking_1.Booking.create({
             customerId: req.user.id,
             staffId,
@@ -87,8 +117,8 @@ const createOrder = async (req, res) => {
     }
 };
 exports.createOrder = createOrder;
-// ─── POST /api/v1/bookings/confirm-payment
-// Verify Razorpay booking fee payment → status: requested → FCM to staff
+// â”€â”€â”€ POST /api/v1/bookings/confirm-payment
+// Verify Razorpay booking fee payment â†’ status: requested â†’ FCM to staff
 const confirmBookingPayment = async (req, res) => {
     try {
         const { bookingId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
@@ -124,7 +154,7 @@ const confirmBookingPayment = async (req, res) => {
             await (0, fcm_1.sendPushNotification)({
                 userId: String(booking.staffId),
                 fcmToken: staff.fcmToken,
-                title: "New Booking Request 🔔",
+                title: "New Booking Request ðŸ””",
                 body: `${customer?.fullName} wants ${booking.service} on ${new Date(booking.date).toDateString()} at ${booking.timeSlot}`,
                 type: "newBookingRequest",
                 metadata: { bookingId: String(booking._id) },
@@ -137,7 +167,7 @@ const confirmBookingPayment = async (req, res) => {
     }
 };
 exports.confirmBookingPayment = confirmBookingPayment;
-// ─── GET /api/v1/bookings/customer
+// â”€â”€â”€ GET /api/v1/bookings/customer
 const getCustomerBookings = async (req, res) => {
     try {
         const { status } = req.query;
@@ -161,7 +191,7 @@ const getCustomerBookings = async (req, res) => {
     }
 };
 exports.getCustomerBookings = getCustomerBookings;
-// ─── GET /api/v1/bookings/staff
+// â”€â”€â”€ GET /api/v1/bookings/staff
 const getStaffBookings = async (req, res) => {
     try {
         const { status } = req.query;
@@ -195,7 +225,7 @@ const getStaffBookings = async (req, res) => {
     }
 };
 exports.getStaffBookings = getStaffBookings;
-// ─── GET /api/v1/bookings/:bookingId
+// â”€â”€â”€ GET /api/v1/bookings/:bookingId
 const getBookingById = async (req, res) => {
     try {
         const booking = await Booking_1.Booking.findById(req.params.bookingId)
@@ -221,7 +251,7 @@ const getBookingById = async (req, res) => {
     }
 };
 exports.getBookingById = getBookingById;
-// ─── PUT /api/v1/bookings/:bookingId/accept
+// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/accept
 const acceptBooking = async (req, res) => {
     try {
         const booking = await Booking_1.Booking.findByIdAndUpdate(req.params.bookingId, { status: "accepted" }, { new: true });
@@ -234,7 +264,7 @@ const acceptBooking = async (req, res) => {
         await (0, fcm_1.sendPushNotification)({
             userId: String(booking.customerId),
             fcmToken: customer?.fcmToken,
-            title: "Booking Accepted ✅",
+            title: "Booking Accepted âœ…",
             body: `${staff?.fullName} accepted your ${booking.service} request`,
             type: "bookingAccepted",
             metadata: { bookingId: String(booking._id) },
@@ -246,7 +276,7 @@ const acceptBooking = async (req, res) => {
     }
 };
 exports.acceptBooking = acceptBooking;
-// ─── PUT /api/v1/bookings/:bookingId/decline
+// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/decline
 const declineBooking = async (req, res) => {
     try {
         const booking = await Booking_1.Booking.findByIdAndUpdate(req.params.bookingId, { status: "declined" }, { new: true });
@@ -254,7 +284,7 @@ const declineBooking = async (req, res) => {
             res.status(404).json({ success: false, message: "Booking not found" });
             return;
         }
-        // Refund ₹30 to customer wallet
+        // Refund â‚¹30 to customer wallet
         await User_1.User.findByIdAndUpdate(booking.customerId, { $inc: { walletBalance: BOOKING_FEE } });
         await Transaction_1.Transaction.create({
             userId: booking.customerId,
@@ -270,8 +300,8 @@ const declineBooking = async (req, res) => {
         await (0, fcm_1.sendPushNotification)({
             userId: String(booking.customerId),
             fcmToken: customer?.fcmToken,
-            title: "Booking Declined ❌",
-            body: `Your booking was declined. ₹${BOOKING_FEE} refunded to wallet.`,
+            title: "Booking Declined âŒ",
+            body: `Your booking was declined. â‚¹${BOOKING_FEE} refunded to wallet.`,
             type: "bookingDeclined",
             metadata: { bookingId: String(booking._id) },
         });
@@ -282,7 +312,7 @@ const declineBooking = async (req, res) => {
     }
 };
 exports.declineBooking = declineBooking;
-// ─── PUT /api/v1/bookings/:bookingId/cancel
+// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/cancel
 const cancelBooking = async (req, res) => {
     try {
         const booking = await Booking_1.Booking.findByIdAndUpdate(req.params.bookingId, { status: "cancelled" }, { new: true });
@@ -298,7 +328,7 @@ const cancelBooking = async (req, res) => {
     }
 };
 exports.cancelBooking = cancelBooking;
-// ─── PUT /api/v1/bookings/:bookingId/start
+// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/start
 const startService = async (req, res) => {
     try {
         const booking = await Booking_1.Booking.findByIdAndUpdate(req.params.bookingId, { status: "ongoing" }, { new: true });
@@ -310,7 +340,7 @@ const startService = async (req, res) => {
         await (0, fcm_1.sendPushNotification)({
             userId: String(booking.customerId),
             fcmToken: customer?.fcmToken,
-            title: "Service Started 🛠️",
+            title: "Service Started ðŸ› ï¸",
             body: `Your ${booking.service} service has started`,
             type: "serviceStarted",
             metadata: { bookingId: String(booking._id) },
@@ -322,7 +352,7 @@ const startService = async (req, res) => {
     }
 };
 exports.startService = startService;
-// ─── PUT /api/v1/bookings/:bookingId/complete  (Staff submits bill)
+// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/complete  (Staff submits bill)
 const completeService = async (req, res) => {
     try {
         const { serviceCharge, additionalCharge } = req.body;
@@ -336,8 +366,8 @@ const completeService = async (req, res) => {
         await (0, fcm_1.sendPushNotification)({
             userId: String(booking.customerId),
             fcmToken: customer?.fcmToken,
-            title: "Task Completed! 💰",
-            body: `Pay ₹${total} to complete your ${booking.service} booking`,
+            title: "Task Completed! ðŸ’°",
+            body: `Pay â‚¹${total} to complete your ${booking.service} booking`,
             type: "paymentPending",
             metadata: { bookingId: String(booking._id), amount: total },
         });
@@ -348,7 +378,7 @@ const completeService = async (req, res) => {
     }
 };
 exports.completeService = completeService;
-// ─── POST /api/v1/bookings/:bookingId/pay-service  (Customer pays staff fee)
+// â”€â”€â”€ POST /api/v1/bookings/:bookingId/pay-service  (Customer pays staff fee)
 const payServiceFee = async (req, res) => {
     try {
         const { method, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
@@ -428,8 +458,8 @@ const payServiceFee = async (req, res) => {
         await (0, fcm_1.sendPushNotification)({
             userId: String(booking.staffId),
             fcmToken: staff?.fcmToken,
-            title: "Payment Received 🎉",
-            body: `₹${staffAmount} received for ${booking.service} service!`,
+            title: "Payment Received ðŸŽ‰",
+            body: `â‚¹${staffAmount} received for ${booking.service} service!`,
             type: "paymentReceived",
             metadata: { bookingId: String(booking._id), amount: staffAmount },
         });
@@ -440,7 +470,7 @@ const payServiceFee = async (req, res) => {
     }
 };
 exports.payServiceFee = payServiceFee;
-// ─── PUT /api/v1/bookings/:bookingId/complete-booking  (Customer submits review → Booking completed)
+// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/complete-booking  (Customer submits review â†’ Booking completed)
 const completeBookingWithReview = async (req, res) => {
     try {
         const { rating, comment, tags } = req.body;
@@ -469,7 +499,7 @@ const completeBookingWithReview = async (req, res) => {
     }
 };
 exports.completeBookingWithReview = completeBookingWithReview;
-// ─── POST /api/v1/bookings/create-service-order  (For Razorpay service payment)
+// â”€â”€â”€ POST /api/v1/bookings/create-service-order  (For Razorpay service payment)
 const createServicePaymentOrder = async (req, res) => {
     try {
         const { bookingId } = req.body;
@@ -502,4 +532,36 @@ const createServicePaymentOrder = async (req, res) => {
     }
 };
 exports.createServicePaymentOrder = createServicePaymentOrder;
+// ─── GET /api/v1/bookings/staff-availability ─────────────────────────────────
+const getStaffAvailability = async (req, res) => {
+    try {
+        const { staffId, date } = req.query;
+        if (!staffId || !date) {
+            res.status(400).json({ success: false, message: "staffId and date are required" });
+            return;
+        }
+        const dateStart = new Date(date);
+        dateStart.setHours(0, 0, 0, 0);
+        const dateEnd = new Date(date);
+        dateEnd.setHours(23, 59, 59, 999);
+        const bookings = await Booking_1.Booking.find({
+            staffId,
+            date: { ['$gte']: dateStart, ['$lte']: dateEnd },
+            status: { ['$in']: timeSlot_1.SLOT_OCCUPYING_STATUSES },
+        }).select("timeSlot status");
+        const busyRanges = bookings.map((b) => (0, timeSlot_1.parseSlotToMinutes)(b.timeSlot));
+        const suggested = (0, timeSlot_1.suggestAvailableSlots)(busyRanges, 8 * 60, 20 * 60, 120, 60, 8);
+        res.json({
+            success: true,
+            date,
+            staffId,
+            busySlots: bookings.map((b) => ({ timeSlot: b.timeSlot, status: b.status })),
+            suggestedSlots: suggested,
+        });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+    }
+};
+exports.getStaffAvailability = getStaffAvailability;
 //# sourceMappingURL=bookings.controller.js.map
