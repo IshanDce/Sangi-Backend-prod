@@ -5,13 +5,17 @@
  *   "10:00 AM"            → treats this as start; end = start + durationMin
  *   "10:00 AM - 12:00 PM" → explicit start and end
  */
+/**
+ * Normalizes a time slot string by converting corrupt dashes or em/en dashes to standard " - ".
+ */
+export declare function normalizeTimeSlot(slot?: string): string;
 /** Format minutes since midnight to "h:mm AM/PM" */
 export declare function minutesToTime12(totalMin: number): string;
 /**
  * Parse a timeSlot string into { start, end } in minutes since midnight.
  * Falls back to durationMin for end if only start provided.
  */
-export declare function parseSlotToMinutes(slot: string, durationMin?: number): {
+export declare function parseSlotToMinutes(rawSlot: string, durationMin?: number): {
     start: number;
     end: number;
 };

@@ -1,4 +1,4 @@
-﻿import { Response } from "express";
+import { Response } from "express";
 import { AuthRequest } from "../../middleware/auth";
 import { Booking } from "../../models/Booking";
 import { Transaction } from "../../models/Transaction";
@@ -8,7 +8,7 @@ import { User } from "../../models/User";
 import { razorpay } from "../../config/razorpay";
 import { verifyRazorpaySignature, isMockMode } from "../../utils/razorpay";
 import { sendPushNotification } from "../../utils/fcm";
-import { parseSlotToMinutes, slotsOverlap, suggestAvailableSlots, SLOT_OCCUPYING_STATUSES } from "../../utils/timeSlot";
+import { parseSlotToMinutes, slotsOverlap, suggestAvailableSlots, SLOT_OCCUPYING_STATUSES, normalizeTimeSlot } from "../../utils/timeSlot";
 
 const BOOKING_FEE = 30;
 
@@ -16,8 +16,8 @@ const BOOKING_FEE = 30;
 const isContactRevealed = (status: string) =>
   ["accepted", "ongoing", "serviceCompleted", "paymentPending", "paymentCompleted", "completed"].includes(status);
 
-// â”€â”€â”€ POST /api/v1/bookings/create-order
-// Creates a draft booking + Razorpay order for â‚¹30 booking fee
+// --- POST /api/v1/bookings/create-order
+// Creates a draft booking + Razorpay order for ₹30 booking fee
 export const createOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { staffId, service, date, timeSlot, location, lat, lng, notes } = req.body;
@@ -86,7 +86,7 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
       staffId,
       service,
       date: new Date(date),
-      timeSlot,
+      timeSlot: normalizeTimeSlot(timeSlot) || timeSlot,
       location,
       coordinates: lat && lng ? { lat, lng } : undefined,
       notes,
@@ -122,8 +122,8 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
   }
 };
 
-// â”€â”€â”€ POST /api/v1/bookings/confirm-payment
-// Verify Razorpay booking fee payment â†’ status: requested â†’ FCM to staff
+// --- POST /api/v1/bookings/confirm-payment
+// Verify Razorpay booking fee payment -> status: requested -> FCM to staff
 export const confirmBookingPayment = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { bookingId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
@@ -161,7 +161,7 @@ export const confirmBookingPayment = async (req: AuthRequest, res: Response): Pr
       await sendPushNotification({
         userId: String(booking.staffId),
         fcmToken: staff.fcmToken,
-        title: "New Booking Request ðŸ””",
+        title: "New Booking Request",
         body: `${customer?.fullName} wants ${booking.service} on ${new Date(booking.date).toDateString()} at ${booking.timeSlot}`,
         type: "newBookingRequest",
         metadata: { bookingId: String(booking._id) },
@@ -174,7 +174,7 @@ export const confirmBookingPayment = async (req: AuthRequest, res: Response): Pr
   }
 };
 
-// â”€â”€â”€ GET /api/v1/bookings/customer
+// --- GET /api/v1/bookings/customer
 export const getCustomerBookings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { status } = req.query;
@@ -198,7 +198,7 @@ export const getCustomerBookings = async (req: AuthRequest, res: Response): Prom
   }
 };
 
-// â”€â”€â”€ GET /api/v1/bookings/staff
+// --- GET /api/v1/bookings/staff
 export const getStaffBookings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { status } = req.query;
@@ -232,7 +232,7 @@ export const getStaffBookings = async (req: AuthRequest, res: Response): Promise
   }
 };
 
-// â”€â”€â”€ GET /api/v1/bookings/:bookingId
+// --- GET /api/v1/bookings/:bookingId
 export const getBookingById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const booking = await Booking.findById(req.params.bookingId)
@@ -256,7 +256,7 @@ export const getBookingById = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/accept
+// --- PUT /api/v1/bookings/:bookingId/accept
 export const acceptBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const booking = await Booking.findByIdAndUpdate(
@@ -272,7 +272,7 @@ export const acceptBooking = async (req: AuthRequest, res: Response): Promise<vo
     await sendPushNotification({
       userId: String(booking.customerId),
       fcmToken: customer?.fcmToken,
-      title: "Booking Accepted âœ…",
+      title: "Booking Accepted",
       body: `${staff?.fullName} accepted your ${booking.service} request`,
       type: "bookingAccepted",
       metadata: { bookingId: String(booking._id) },
@@ -284,7 +284,7 @@ export const acceptBooking = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
-// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/decline
+// --- PUT /api/v1/bookings/:bookingId/decline
 export const declineBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const booking = await Booking.findByIdAndUpdate(
@@ -294,7 +294,7 @@ export const declineBooking = async (req: AuthRequest, res: Response): Promise<v
     );
     if (!booking) { res.status(404).json({ success: false, message: "Booking not found" }); return; }
 
-    // Refund â‚¹30 to customer wallet
+    // Refund ₹30 to customer wallet
     await User.findByIdAndUpdate(booking.customerId, { $inc: { walletBalance: BOOKING_FEE } });
     await Transaction.create({
       userId: booking.customerId,
@@ -311,8 +311,8 @@ export const declineBooking = async (req: AuthRequest, res: Response): Promise<v
     await sendPushNotification({
       userId: String(booking.customerId),
       fcmToken: customer?.fcmToken,
-      title: "Booking Declined âŒ",
-      body: `Your booking was declined. â‚¹${BOOKING_FEE} refunded to wallet.`,
+      title: "Booking Declined",
+      body: `Your booking was declined. ₹${BOOKING_FEE} refunded to wallet.`,
       type: "bookingDeclined",
       metadata: { bookingId: String(booking._id) },
     });
@@ -323,7 +323,7 @@ export const declineBooking = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/cancel
+// --- PUT /api/v1/bookings/:bookingId/cancel
 export const cancelBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const booking = await Booking.findByIdAndUpdate(
@@ -339,7 +339,7 @@ export const cancelBooking = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
-// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/start
+// --- PUT /api/v1/bookings/:bookingId/start
 export const startService = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const booking = await Booking.findByIdAndUpdate(
@@ -353,7 +353,7 @@ export const startService = async (req: AuthRequest, res: Response): Promise<voi
     await sendPushNotification({
       userId: String(booking.customerId),
       fcmToken: customer?.fcmToken,
-      title: "Service Started ðŸ› ï¸",
+      title: "Service Started",
       body: `Your ${booking.service} service has started`,
       type: "serviceStarted",
       metadata: { bookingId: String(booking._id) },
@@ -365,7 +365,7 @@ export const startService = async (req: AuthRequest, res: Response): Promise<voi
   }
 };
 
-// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/complete  (Staff submits bill)
+// --- PUT /api/v1/bookings/:bookingId/complete  (Staff submits bill)
 export const completeService = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { serviceCharge, additionalCharge } = req.body;
@@ -382,8 +382,8 @@ export const completeService = async (req: AuthRequest, res: Response): Promise<
     await sendPushNotification({
       userId: String(booking.customerId),
       fcmToken: customer?.fcmToken,
-      title: "Task Completed! ðŸ’°",
-      body: `Pay â‚¹${total} to complete your ${booking.service} booking`,
+      title: "Task Completed!",
+      body: `Pay ₹${total} to complete your ${booking.service} booking`,
       type: "paymentPending",
       metadata: { bookingId: String(booking._id), amount: total },
     });
@@ -394,7 +394,7 @@ export const completeService = async (req: AuthRequest, res: Response): Promise<
   }
 };
 
-// â”€â”€â”€ POST /api/v1/bookings/:bookingId/pay-service  (Customer pays staff fee)
+// --- POST /api/v1/bookings/:bookingId/pay-service  (Customer pays staff fee)
 export const payServiceFee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { method, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
@@ -473,8 +473,8 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
     await sendPushNotification({
       userId: String(booking.staffId),
       fcmToken: staff?.fcmToken,
-      title: "Payment Received ðŸŽ‰",
-      body: `â‚¹${staffAmount} received for ${booking.service} service!`,
+      title: "Payment Received",
+      body: `₹${staffAmount} received for ${booking.service} service!`,
       type: "paymentReceived",
       metadata: { bookingId: String(booking._id), amount: staffAmount },
     });
@@ -485,7 +485,7 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
-// â”€â”€â”€ PUT /api/v1/bookings/:bookingId/complete-booking  (Customer submits review â†’ Booking completed)
+// --- PUT /api/v1/bookings/:bookingId/complete-booking  (Customer submits review -> Booking completed)
 export const completeBookingWithReview = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { rating, comment, tags } = req.body;
@@ -520,7 +520,7 @@ export const completeBookingWithReview = async (req: AuthRequest, res: Response)
   }
 };
 
-// â”€â”€â”€ POST /api/v1/bookings/create-service-order  (For Razorpay service payment)
+// --- POST /api/v1/bookings/create-service-order  (For Razorpay service payment)
 export const createServicePaymentOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { bookingId } = req.body;

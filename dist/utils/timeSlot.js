@@ -8,10 +8,22 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SLOT_OCCUPYING_STATUSES = void 0;
+exports.normalizeTimeSlot = normalizeTimeSlot;
 exports.minutesToTime12 = minutesToTime12;
 exports.parseSlotToMinutes = parseSlotToMinutes;
 exports.slotsOverlap = slotsOverlap;
 exports.suggestAvailableSlots = suggestAvailableSlots;
+/**
+ * Normalizes a time slot string by converting corrupt dashes or em/en dashes to standard " - ".
+ */
+function normalizeTimeSlot(slot) {
+    if (!slot)
+        return '';
+    return slot
+        .replace(/[\u2014\u2013\u2012\u2015]|[\u00E2][\u20AC][\u201D\u2013"]|â€”|â€“|â€"/g, ' - ')
+        .replace(/\s*-\s*/g, ' - ')
+        .trim();
+}
 const SLOT_DURATION_MIN = 120; // default: 2 hours per service
 /** Parse "h:mm AM/PM" into minutes since midnight */
 function parseTime12(time) {
@@ -47,7 +59,8 @@ function minutesToTime12(totalMin) {
  * Parse a timeSlot string into { start, end } in minutes since midnight.
  * Falls back to durationMin for end if only start provided.
  */
-function parseSlotToMinutes(slot, durationMin = SLOT_DURATION_MIN) {
+function parseSlotToMinutes(rawSlot, durationMin = SLOT_DURATION_MIN) {
+    const slot = normalizeTimeSlot(rawSlot);
     if (!slot || slot.trim() === '')
         return { start: -1, end: -1 };
     const rangeSep = slot.includes(' - ') ? ' - ' : slot.includes('-') ? '-' : null;

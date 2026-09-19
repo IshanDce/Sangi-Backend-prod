@@ -1,10 +1,22 @@
-﻿/**
+/**
  * timeSlot.ts — Utility for parsing and comparing time slots
  *
  * Supports two formats:
  *   "10:00 AM"            → treats this as start; end = start + durationMin
  *   "10:00 AM - 12:00 PM" → explicit start and end
  */
+
+
+/**
+ * Normalizes a time slot string by converting corrupt dashes or em/en dashes to standard " - ".
+ */
+export function normalizeTimeSlot(slot?: string): string {
+  if (!slot) return '';
+  return slot
+    .replace(/[\u2014\u2013\u2012\u2015]|[\u00E2][\u20AC][\u201D\u2013"]|â€”|â€“|â€"/g, ' - ')
+    .replace(/\s*-\s*/g, ' - ')
+    .trim();
+}
 
 const SLOT_DURATION_MIN = 120; // default: 2 hours per service
 
@@ -40,9 +52,10 @@ export function minutesToTime12(totalMin: number): string {
  * Falls back to durationMin for end if only start provided.
  */
 export function parseSlotToMinutes(
-  slot: string,
+  rawSlot: string,
   durationMin: number = SLOT_DURATION_MIN
 ): { start: number; end: number } {
+  const slot = normalizeTimeSlot(rawSlot);
   if (!slot || slot.trim() === '') return { start: -1, end: -1 };
 
   const rangeSep = slot.includes(' - ') ? ' - ' : slot.includes('-') ? '-' : null;

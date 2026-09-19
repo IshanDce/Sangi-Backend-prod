@@ -1,4 +1,4 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import {
   createOrder, confirmBookingPayment, getCustomerBookings, getStaffBookings,
   getBookingById, acceptBooking, declineBooking, cancelBooking,
