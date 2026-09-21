@@ -13,10 +13,34 @@ const signToken = (id, role) => jsonwebtoken_1.default.sign({ id, role }, proces
 // POST /api/v1/auth/send-otp
 const sendOtp = async (req, res) => {
     try {
-        const { phone, purpose } = req.body;
+        const { phone, purpose, role } = req.body;
         if (!phone || !purpose) {
             res.status(400).json({ success: false, message: "phone and purpose required" });
             return;
+        }
+        // Role-based login verification
+        if (purpose === "login") {
+            const user = await User_1.User.findOne({ phone });
+            if (!user) {
+                res.status(404).json({
+                    success: false,
+                    errorCode: "USER_NOT_FOUND",
+                    message: "No account found with this phone number. Please register first.",
+                });
+                return;
+            }
+            if (role && user.role !== role) {
+                const isStaff = user.role === "staff";
+                res.status(403).json({
+                    success: false,
+                    errorCode: "ROLE_MISMATCH",
+                    registeredRole: user.role,
+                    message: isStaff
+                        ? "This phone number is registered as a Service Partner. Please switch to the Partner Login tab."
+                        : "This phone number is registered as a Customer. Please switch to the Customer Login tab.",
+                });
+                return;
+            }
         }
         await Otp_1.Otp.deleteMany({ phone });
         const otp = (0, otp_1.generateOtp)();
@@ -34,18 +58,32 @@ exports.sendOtp = sendOtp;
 // POST /api/v1/auth/verify-otp
 const verifyOtp = async (req, res) => {
     try {
-        const { phone, otp } = req.body;
+        const { phone, otp, role } = req.body;
         const record = await Otp_1.Otp.findOne({ phone, otp });
         if (!record) {
             res.status(400).json({ success: false, message: "Invalid or expired OTP" });
             return;
         }
-        await Otp_1.Otp.deleteOne({ _id: record._id });
-        const user = await User_1.User.findOneAndUpdate({ phone }, { isPhoneVerified: true }, { new: true });
+        const user = await User_1.User.findOne({ phone });
         if (!user) {
             res.status(404).json({ success: false, message: "User not found. Please register first." });
             return;
         }
+        if (role && user.role !== role) {
+            const isStaff = user.role === "staff";
+            res.status(403).json({
+                success: false,
+                errorCode: "ROLE_MISMATCH",
+                registeredRole: user.role,
+                message: isStaff
+                    ? "This account is registered as a Service Partner. Please login through the Partner Login tab."
+                    : "This account is registered as a Customer. Please login through the Customer Login tab.",
+            });
+            return;
+        }
+        await Otp_1.Otp.deleteOne({ _id: record._id });
+        user.isPhoneVerified = true;
+        await user.save();
         const token = signToken(String(user._id), user.role);
         res.json({
             success: true,
@@ -61,10 +99,22 @@ exports.verifyOtp = verifyOtp;
 // POST /api/v1/auth/login
 const login = async (req, res) => {
     try {
-        const { phone, password } = req.body;
+        const { phone, password, role } = req.body;
         const user = await User_1.User.findOne({ phone });
         if (!user || !(await user.comparePassword(password))) {
             res.status(401).json({ success: false, message: "Invalid phone or password" });
+            return;
+        }
+        if (role && user.role !== role) {
+            const isStaff = user.role === "staff";
+            res.status(403).json({
+                success: false,
+                errorCode: "ROLE_MISMATCH",
+                registeredRole: user.role,
+                message: isStaff
+                    ? "This account is registered as a Service Partner. Please login through the Partner Login tab."
+                    : "This account is registered as a Customer. Please login through the Customer Login tab.",
+            });
             return;
         }
         const token = signToken(String(user._id), user.role);
