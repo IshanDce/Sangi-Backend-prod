@@ -17,6 +17,7 @@ router.post("/confirm-payment", requireRole("customer"), confirmBookingPayment);
 router.post("/create-service-order", requireRole("customer"), createServicePaymentOrder);
 router.get("/customer", requireRole("customer"), getCustomerBookings);
 router.post("/:bookingId/pay-service", requireRole("customer"), payServiceFee);
+router.put("/:bookingId/pay-service", requireRole("customer"), payServiceFee);
 router.put("/:bookingId/complete-booking", requireRole("customer"), completeBookingWithReview);
 router.put("/:bookingId/cancel", cancelBooking);
 

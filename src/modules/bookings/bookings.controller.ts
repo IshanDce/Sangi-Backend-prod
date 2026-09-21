@@ -401,7 +401,11 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
     const booking = await Booking.findById(req.params.bookingId);
     if (!booking) { res.status(404).json({ success: false, message: "Booking not found" }); return; }
 
-    const amount = booking.totalServiceAmount!;
+    const amount = booking.totalServiceAmount || ((booking.serviceCharge || 0) + (booking.additionalCharge || 0)) || 0;
+    if (amount <= 0) {
+      res.status(400).json({ success: false, message: "Invalid service charge amount" });
+      return;
+    }
     const commission = amount * 0.25;
     const staffAmount = amount * 0.75;
 
@@ -525,8 +529,13 @@ export const createServicePaymentOrder = async (req: AuthRequest, res: Response)
   try {
     const { bookingId } = req.body;
     const booking = await Booking.findById(bookingId);
-    if (!booking || !booking.totalServiceAmount) {
-      res.status(404).json({ success: false, message: "Booking or amount not found" });
+    if (!booking) {
+      res.status(404).json({ success: false, message: "Booking not found" });
+      return;
+    }
+    const amount = booking.totalServiceAmount || ((booking.serviceCharge || 0) + (booking.additionalCharge || 0)) || 0;
+    if (amount <= 0) {
+      res.status(400).json({ success: false, message: "Service charge not set yet" });
       return;
     }
     let order: { id: string };
@@ -535,7 +544,7 @@ export const createServicePaymentOrder = async (req: AuthRequest, res: Response)
         order = { id: `order_mock_${booking._id}_${Date.now()}` };
       } else {
         order = await razorpay.orders.create({
-          amount: booking.totalServiceAmount * 100,
+          amount: Math.round(amount * 100),
           currency: "INR",
           receipt: `svc_${String(booking._id)}`,
         });
@@ -544,7 +553,7 @@ export const createServicePaymentOrder = async (req: AuthRequest, res: Response)
       console.warn("[Razorpay] Order creation fallback to mock order ID:", String(rzpErr));
       order = { id: `order_mock_${booking._id}_${Date.now()}` };
     }
-    res.json({ success: true, razorpayOrderId: order.id, amount: booking.totalServiceAmount });
+    res.json({ success: true, razorpayOrderId: order.id, amount });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
   }

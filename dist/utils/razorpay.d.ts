@@ -7,5 +7,5 @@
  * It also auto-engages when the Razorpay SDK throws on order creation.
  */
 export declare const isMockMode: () => boolean;
-export declare const isMockOrderId: (orderId: string) => boolean;
-export declare const verifyRazorpaySignature: (orderId: string, paymentId: string, signature: string) => boolean;
+export declare const isMockOrderId: (orderId?: string) => boolean;
+export declare const verifyRazorpaySignature: (orderId?: string, paymentId?: string, signature?: string) => boolean;

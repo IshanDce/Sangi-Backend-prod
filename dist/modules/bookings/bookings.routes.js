@@ -11,6 +11,7 @@ router.post("/confirm-payment", (0, auth_1.requireRole)("customer"), bookings_co
 router.post("/create-service-order", (0, auth_1.requireRole)("customer"), bookings_controller_1.createServicePaymentOrder);
 router.get("/customer", (0, auth_1.requireRole)("customer"), bookings_controller_1.getCustomerBookings);
 router.post("/:bookingId/pay-service", (0, auth_1.requireRole)("customer"), bookings_controller_1.payServiceFee);
+router.put("/:bookingId/pay-service", (0, auth_1.requireRole)("customer"), bookings_controller_1.payServiceFee);
 router.put("/:bookingId/complete-booking", (0, auth_1.requireRole)("customer"), bookings_controller_1.completeBookingWithReview);
 router.put("/:bookingId/cancel", bookings_controller_1.cancelBooking);
 // Staff actions

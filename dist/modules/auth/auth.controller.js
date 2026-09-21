@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.logout = exports.registerCustomer = exports.login = exports.verifyOtp = exports.sendOtp = void 0;
+exports.logout = exports.resetPassword = exports.verifyForgotOtp = exports.registerCustomer = exports.login = exports.verifyOtp = exports.sendOtp = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const User_1 = require("../../models/User");
@@ -42,12 +42,24 @@ const sendOtp = async (req, res) => {
                 return;
             }
         }
+        // Forgot password: phone must be registered
+        if (purpose === "forgot_password") {
+            const user = await User_1.User.findOne({ phone });
+            if (!user) {
+                res.status(404).json({
+                    success: false,
+                    errorCode: "USER_NOT_FOUND",
+                    message: "No account found with this phone number.",
+                });
+                return;
+            }
+        }
         await Otp_1.Otp.deleteMany({ phone });
         const otp = (0, otp_1.generateOtp)();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min TTL
         await Otp_1.Otp.create({ phone, otp, purpose, expiresAt });
-        // In production: send via MSG91 / Fast2SMS
-        console.log(`[OTP] phone=${phone} otp=${otp}`);
+        // Send OTP via Linerpay SMS (or console log in mock mode)
+        await (0, otp_1.sendOtpSms)(phone, otp);
         res.json({ success: true, message: "OTP sent successfully" });
     }
     catch (err) {
@@ -147,6 +159,74 @@ const registerCustomer = async (req, res) => {
     }
 };
 exports.registerCustomer = registerCustomer;
+// POST /api/v1/auth/forgot-password/verify-otp
+// Verifies OTP and returns a short-lived reset token (no JWT login)
+const verifyForgotOtp = async (req, res) => {
+    try {
+        const { phone, otp } = req.body;
+        if (!phone || !otp) {
+            res.status(400).json({ success: false, message: "phone and otp required" });
+            return;
+        }
+        const record = await Otp_1.Otp.findOne({ phone, otp, purpose: "forgot_password" });
+        if (!record) {
+            res.status(400).json({ success: false, message: "Invalid or expired OTP" });
+            return;
+        }
+        if (record.expiresAt < new Date()) {
+            await Otp_1.Otp.deleteOne({ _id: record._id });
+            res.status(400).json({ success: false, message: "OTP has expired. Please request a new one." });
+            return;
+        }
+        await Otp_1.Otp.deleteOne({ _id: record._id });
+        // Issue a short-lived reset token (5 minutes)
+        const resetToken = jsonwebtoken_1.default.sign({ phone, purpose: "reset_password" }, process.env.JWT_SECRET, { expiresIn: "5m" });
+        res.json({ success: true, resetToken });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+    }
+};
+exports.verifyForgotOtp = verifyForgotOtp;
+// POST /api/v1/auth/reset-password
+// Resets password using the short-lived reset token
+const resetPassword = async (req, res) => {
+    try {
+        const { resetToken, newPassword } = req.body;
+        if (!resetToken || !newPassword) {
+            res.status(400).json({ success: false, message: "resetToken and newPassword required" });
+            return;
+        }
+        if (newPassword.length < 6) {
+            res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+            return;
+        }
+        let payload;
+        try {
+            payload = jsonwebtoken_1.default.verify(resetToken, process.env.JWT_SECRET);
+        }
+        catch {
+            res.status(401).json({ success: false, message: "Reset link has expired. Please try again." });
+            return;
+        }
+        if (payload?.purpose !== "reset_password") {
+            res.status(401).json({ success: false, message: "Invalid reset token" });
+            return;
+        }
+        const user = await User_1.User.findOne({ phone: payload.phone });
+        if (!user) {
+            res.status(404).json({ success: false, message: "User not found" });
+            return;
+        }
+        user.passwordHash = await bcryptjs_1.default.hash(newPassword, 12);
+        await user.save();
+        res.json({ success: true, message: "Password reset successfully. Please login with your new password." });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+    }
+};
+exports.resetPassword = resetPassword;
 // POST /api/v1/auth/logout
 const logout = async (_req, res) => {
     res.json({ success: true, message: "Logged out successfully" });

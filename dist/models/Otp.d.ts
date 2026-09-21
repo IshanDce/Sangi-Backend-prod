@@ -2,7 +2,7 @@ import mongoose, { Document } from 'mongoose';
 export interface IOtp extends Document {
     phone: string;
     otp: string;
-    purpose: 'register' | 'login';
+    purpose: 'register' | 'login' | 'forgot_password';
     expiresAt: Date;
 }
 export declare const Otp: mongoose.Model<IOtp, {}, {}, {}, Document<unknown, {}, IOtp, {}, mongoose.DefaultSchemaOptions> & IOtp & Required<{

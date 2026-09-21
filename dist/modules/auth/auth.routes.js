@@ -8,6 +8,8 @@ router.post("/send-otp", auth_controller_1.sendOtp);
 router.post("/verify-otp", auth_controller_1.verifyOtp);
 router.post("/login", auth_controller_1.login);
 router.post("/register/customer", auth_controller_1.registerCustomer);
+router.post("/forgot-password/verify-otp", auth_controller_1.verifyForgotOtp);
+router.post("/reset-password", auth_controller_1.resetPassword);
 router.post("/logout", auth_1.protect, auth_controller_1.logout);
 exports.default = router;
 //# sourceMappingURL=auth.routes.js.map

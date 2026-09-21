@@ -38,7 +38,7 @@ const mongoose_1 = __importStar(require("mongoose"));
 const OtpSchema = new mongoose_1.Schema({
     phone: { type: String, required: true },
     otp: { type: String, required: true },
-    purpose: { type: String, enum: ['register', 'login'], required: true },
+    purpose: { type: String, enum: ['register', 'login', 'forgot_password'], required: true },
     expiresAt: { type: Date, required: true },
 });
 OtpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
