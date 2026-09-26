@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 
   // Find user
   const user = await db.collection('users').findOne({
-    $or: [{ email: 'newstaff@gmail.com' }, { phone: '1212121212' }]
+    $or: [{ email: 'sanjeevkumhar.pun@gmail.com' }, { phone: '9312121655' }]
   });
 
   if (!user) {

@@ -72,6 +72,11 @@ const StaffProfileSchema = new mongoose_1.Schema({
         ifscCode: String,
         bankName: String,
     },
+    portfolio: [{
+            url: { type: String, required: true },
+            caption: String,
+            uploadedAt: { type: Date, default: Date.now },
+        }],
     // No defaults here — `location` is only written when the staff app
     // pushes a real GPS fix. A profile with no location has no `location`
     // key at all (not even `type: "Point"`), so Mongo's 2dsphere index

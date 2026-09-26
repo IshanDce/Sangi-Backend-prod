@@ -59,6 +59,11 @@ export interface IStaffProfile extends Document {
         ifscCode?: string;
         bankName?: string;
     };
+    portfolio: {
+        url: string;
+        caption?: string;
+        uploadedAt: Date;
+    }[];
     location?: {
         type: string;
         coordinates: number[];

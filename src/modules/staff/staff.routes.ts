@@ -3,6 +3,7 @@ import {
   registerStep1, registerStep2Services, registerStep3Availability, registerStep4Kyc,
   searchStaff, getStaffProfile, getMyProfile, updateMyProfile, updateMyServices, updateMyAvailability,
   updateBankAccount, updateMyLocation,
+  uploadPortfolio, deletePortfolioImage,
 } from "./staff.controller";
 
 import { protect, requireRole } from "../../middleware/auth";
@@ -30,6 +31,9 @@ router.put("/me/services", protect, requireRole("staff"), updateMyServices);
 router.put("/me/availability", protect, requireRole("staff"), updateMyAvailability);
 router.put("/me/bank-account", protect, requireRole("staff"), updateBankAccount);
 router.put("/me/location", protect, requireRole("staff"), updateMyLocation);
+
+router.post("/me/portfolio", protect, requireRole("staff"), upload.array("images", 5), uploadPortfolio);
+router.delete("/me/portfolio/:imageIndex", protect, requireRole("staff"), deletePortfolioImage);
 
 // Parameterized staff profile route (must come after /me/*)
 router.get("/:staffId/profile", protect, getStaffProfile);

@@ -18,6 +18,8 @@ router.put("/me/services", auth_1.protect, (0, auth_1.requireRole)("staff"), sta
 router.put("/me/availability", auth_1.protect, (0, auth_1.requireRole)("staff"), staff_controller_1.updateMyAvailability);
 router.put("/me/bank-account", auth_1.protect, (0, auth_1.requireRole)("staff"), staff_controller_1.updateBankAccount);
 router.put("/me/location", auth_1.protect, (0, auth_1.requireRole)("staff"), staff_controller_1.updateMyLocation);
+router.post("/me/portfolio", auth_1.protect, (0, auth_1.requireRole)("staff"), upload_1.upload.array("images", 5), staff_controller_1.uploadPortfolio);
+router.delete("/me/portfolio/:imageIndex", auth_1.protect, (0, auth_1.requireRole)("staff"), staff_controller_1.deletePortfolioImage);
 // Parameterized staff profile route (must come after /me/*)
 router.get("/:staffId/profile", auth_1.protect, staff_controller_1.getStaffProfile);
 exports.default = router;

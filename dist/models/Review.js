@@ -42,6 +42,7 @@ const ReviewSchema = new mongoose_1.Schema({
     rating: { type: Number, required: true, min: 1, max: 5 },
     comment: String,
     tags: [{ type: String }],
+    images: [{ type: String }],
 }, { timestamps: true });
 exports.Review = mongoose_1.default.model('Review', ReviewSchema);
 //# sourceMappingURL=Review.js.map

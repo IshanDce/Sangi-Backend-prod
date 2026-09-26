@@ -12,3 +12,5 @@ export declare const updateMyServices: (req: AuthRequest, res: Response) => Prom
 export declare const updateMyAvailability: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const updateBankAccount: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const updateMyLocation: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const uploadPortfolio: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const deletePortfolioImage: (req: AuthRequest, res: Response) => Promise<void>;

@@ -6,6 +6,7 @@ export interface IReview extends Document {
     rating: number;
     comment?: string;
     tags: string[];
+    images: string[];
 }
 export declare const Review: mongoose.Model<IReview, {}, {}, {}, Document<unknown, {}, IReview, {}, mongoose.DefaultSchemaOptions> & IReview & Required<{
     _id: mongoose.Types.ObjectId;

@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { imagekit } from "../../config/imagekit";
 import { AuthRequest } from "../../middleware/auth";
 import { Booking } from "../../models/Booking";
 import { Transaction } from "../../models/Transaction";
@@ -490,6 +491,7 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
 };
 
 // --- PUT /api/v1/bookings/:bookingId/complete-booking  (Customer submits review -> Booking completed)
+// Accepts multipart with optional images[] (up to 3 photos)
 export const completeBookingWithReview = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { rating, comment, tags } = req.body;
@@ -500,14 +502,40 @@ export const completeBookingWithReview = async (req: AuthRequest, res: Response)
     );
     if (!booking) { res.status(404).json({ success: false, message: "Booking not found" }); return; }
 
-    // Save review
+    // Upload review images to ImageKit (if any)
+    const imageUrls: string[] = [];
+    const files = req.files as Express.Multer.File[] | undefined;
+    if (files && files.length > 0) {
+      for (const file of files.slice(0, 3)) { // max 3 images
+        const b64 = file.buffer.toString("base64");
+        const result = await imagekit.upload({
+          file: b64,
+          fileName: `review_${booking._id}_${Date.now()}.jpg`,
+          folder: "/sangi/reviews/",
+        });
+        imageUrls.push(result.url);
+      }
+    }
+
+    // Parse tags — might arrive as JSON string from multipart form
+    let parsedTags: string[] = [];
+    if (tags) {
+      if (typeof tags === "string") {
+        try { parsedTags = JSON.parse(tags); } catch { parsedTags = [tags]; }
+      } else if (Array.isArray(tags)) {
+        parsedTags = tags;
+      }
+    }
+
+    // Save review with images
     await Review.create({
       bookingId: booking._id,
       customerId: req.user!.id,
       staffId: booking.staffId,
-      rating,
+      rating: Number(rating),
       comment,
-      tags: tags || [],
+      tags: parsedTags,
+      images: imageUrls,
     });
 
     // Recalculate staff rating

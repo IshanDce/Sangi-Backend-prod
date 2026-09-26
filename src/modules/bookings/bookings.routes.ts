@@ -6,6 +6,7 @@ import {
   createServicePaymentOrder, getStaffAvailability,
 } from "./bookings.controller";
 import { protect, requireRole } from "../../middleware/auth";
+import { upload } from "../../middleware/upload";
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.post("/create-service-order", requireRole("customer"), createServicePayme
 router.get("/customer", requireRole("customer"), getCustomerBookings);
 router.post("/:bookingId/pay-service", requireRole("customer"), payServiceFee);
 router.put("/:bookingId/pay-service", requireRole("customer"), payServiceFee);
-router.put("/:bookingId/complete-booking", requireRole("customer"), completeBookingWithReview);
+router.put("/:bookingId/complete-booking", requireRole("customer"), upload.array("images", 3), completeBookingWithReview);
 router.put("/:bookingId/cancel", cancelBooking);
 
 // Staff actions

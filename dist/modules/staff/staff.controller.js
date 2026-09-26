@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateMyLocation = exports.updateBankAccount = exports.updateMyAvailability = exports.updateMyServices = exports.updateMyProfile = exports.getMyProfile = exports.getStaffProfile = exports.searchStaff = exports.registerStep4Kyc = exports.registerStep3Availability = exports.registerStep2Services = exports.registerStep1 = void 0;
+exports.deletePortfolioImage = exports.uploadPortfolio = exports.updateMyLocation = exports.updateBankAccount = exports.updateMyAvailability = exports.updateMyServices = exports.updateMyProfile = exports.getMyProfile = exports.getStaffProfile = exports.searchStaff = exports.registerStep4Kyc = exports.registerStep3Availability = exports.registerStep2Services = exports.registerStep1 = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const User_1 = require("../../models/User");
 const StaffProfile_1 = require("../../models/StaffProfile");
@@ -310,4 +310,67 @@ const updateMyLocation = async (req, res) => {
     }
 };
 exports.updateMyLocation = updateMyLocation;
+// ─── POST /api/v1/staff/me/portfolio  (upload 1-5 portfolio images, multipart)
+const uploadPortfolio = async (req, res) => {
+    try {
+        const profile = await StaffProfile_1.StaffProfile.findOne({ userId: req.user.id });
+        if (!profile) {
+            res.status(404).json({ success: false, message: "Staff profile not found" });
+            return;
+        }
+        const MAX_PORTFOLIO = 10;
+        const currentCount = profile.portfolio?.length ?? 0;
+        const files = req.files;
+        if (!files || files.length === 0) {
+            res.status(400).json({ success: false, message: "No images provided" });
+            return;
+        }
+        if (currentCount + files.length > MAX_PORTFOLIO) {
+            res.status(400).json({
+                success: false,
+                message: `Portfolio limit is ${MAX_PORTFOLIO} images. You have ${currentCount}, trying to add ${files.length}.`,
+            });
+            return;
+        }
+        const uploadedImages = [];
+        for (const file of files) {
+            const b64 = file.buffer.toString("base64");
+            const result = await imagekit_1.imagekit.upload({
+                file: b64,
+                fileName: `portfolio_${req.user.id}_${Date.now()}.jpg`,
+                folder: "/sangi/portfolio/",
+            });
+            uploadedImages.push({ url: result.url, uploadedAt: new Date() });
+        }
+        profile.portfolio = [...(profile.portfolio ?? []), ...uploadedImages];
+        await profile.save();
+        res.json({ success: true, portfolio: profile.portfolio });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+    }
+};
+exports.uploadPortfolio = uploadPortfolio;
+// ─── DELETE /api/v1/staff/me/portfolio/:imageIndex
+const deletePortfolioImage = async (req, res) => {
+    try {
+        const index = parseInt(req.params.imageIndex, 10);
+        const profile = await StaffProfile_1.StaffProfile.findOne({ userId: req.user.id });
+        if (!profile) {
+            res.status(404).json({ success: false, message: "Staff profile not found" });
+            return;
+        }
+        if (isNaN(index) || index < 0 || index >= (profile.portfolio?.length ?? 0)) {
+            res.status(400).json({ success: false, message: "Invalid image index" });
+            return;
+        }
+        profile.portfolio.splice(index, 1);
+        await profile.save();
+        res.json({ success: true, portfolio: profile.portfolio });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+    }
+};
+exports.deletePortfolioImage = deletePortfolioImage;
 //# sourceMappingURL=staff.controller.js.map

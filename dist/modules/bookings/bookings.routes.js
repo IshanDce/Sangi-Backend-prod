@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const bookings_controller_1 = require("./bookings.controller");
 const auth_1 = require("../../middleware/auth");
+const upload_1 = require("../../middleware/upload");
 const router = (0, express_1.Router)();
 router.use(auth_1.protect);
 // Customer actions
@@ -12,7 +13,7 @@ router.post("/create-service-order", (0, auth_1.requireRole)("customer"), bookin
 router.get("/customer", (0, auth_1.requireRole)("customer"), bookings_controller_1.getCustomerBookings);
 router.post("/:bookingId/pay-service", (0, auth_1.requireRole)("customer"), bookings_controller_1.payServiceFee);
 router.put("/:bookingId/pay-service", (0, auth_1.requireRole)("customer"), bookings_controller_1.payServiceFee);
-router.put("/:bookingId/complete-booking", (0, auth_1.requireRole)("customer"), bookings_controller_1.completeBookingWithReview);
+router.put("/:bookingId/complete-booking", (0, auth_1.requireRole)("customer"), upload_1.upload.array("images", 3), bookings_controller_1.completeBookingWithReview);
 router.put("/:bookingId/cancel", bookings_controller_1.cancelBooking);
 // Staff actions
 router.get("/staff", (0, auth_1.requireRole)("staff"), bookings_controller_1.getStaffBookings);

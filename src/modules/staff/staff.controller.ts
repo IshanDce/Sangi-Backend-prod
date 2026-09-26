@@ -325,3 +325,67 @@ export const updateMyLocation = async (req: AuthRequest, res: Response): Promise
     res.status(500).json({ success: false, message: String(err) });
   }
 };
+
+// ─── POST /api/v1/staff/me/portfolio  (upload 1-5 portfolio images, multipart)
+export const uploadPortfolio = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const profile = await StaffProfile.findOne({ userId: req.user!.id });
+    if (!profile) { res.status(404).json({ success: false, message: "Staff profile not found" }); return; }
+
+    const MAX_PORTFOLIO = 10;
+    const currentCount = profile.portfolio?.length ?? 0;
+
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) {
+      res.status(400).json({ success: false, message: "No images provided" });
+      return;
+    }
+    if (currentCount + files.length > MAX_PORTFOLIO) {
+      res.status(400).json({
+        success: false,
+        message: `Portfolio limit is ${MAX_PORTFOLIO} images. You have ${currentCount}, trying to add ${files.length}.`,
+      });
+      return;
+    }
+
+    const uploadedImages: { url: string; caption?: string; uploadedAt: Date }[] = [];
+    for (const file of files) {
+      const b64 = file.buffer.toString("base64");
+      const result = await imagekit.upload({
+        file: b64,
+        fileName: `portfolio_${req.user!.id}_${Date.now()}.jpg`,
+        folder: "/sangi/portfolio/",
+      });
+      uploadedImages.push({ url: result.url, uploadedAt: new Date() });
+    }
+
+    profile.portfolio = [...(profile.portfolio ?? []), ...uploadedImages];
+    await profile.save();
+
+    res.json({ success: true, portfolio: profile.portfolio });
+  } catch (err) {
+    res.status(500).json({ success: false, message: String(err) });
+  }
+};
+
+// ─── DELETE /api/v1/staff/me/portfolio/:imageIndex
+export const deletePortfolioImage = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const index = parseInt(req.params.imageIndex as string, 10);
+    const profile = await StaffProfile.findOne({ userId: req.user!.id });
+    if (!profile) { res.status(404).json({ success: false, message: "Staff profile not found" }); return; }
+
+    if (isNaN(index) || index < 0 || index >= (profile.portfolio?.length ?? 0)) {
+      res.status(400).json({ success: false, message: "Invalid image index" });
+      return;
+    }
+
+    profile.portfolio.splice(index, 1);
+    await profile.save();
+
+    res.json({ success: true, portfolio: profile.portfolio });
+  } catch (err) {
+    res.status(500).json({ success: false, message: String(err) });
+  }
+};
+

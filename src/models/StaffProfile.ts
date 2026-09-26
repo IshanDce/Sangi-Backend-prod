@@ -38,6 +38,7 @@ export interface IStaffProfile extends Document {
     ifscCode?: string;
     bankName?: string;
   };
+  portfolio: { url: string; caption?: string; uploadedAt: Date }[];
   // Live location — only set when staff app pushes real GPS.
   // Schema has NO default coords so a profile without a real push has
   // `location: undefined` and is naturally excluded from nearby search.
@@ -78,6 +79,11 @@ const StaffProfileSchema = new Schema<IStaffProfile>(
       ifscCode: String,
       bankName: String,
     },
+    portfolio: [{
+      url: { type: String, required: true },
+      caption: String,
+      uploadedAt: { type: Date, default: Date.now },
+    }],
     // No defaults here — `location` is only written when the staff app
     // pushes a real GPS fix. A profile with no location has no `location`
     // key at all (not even `type: "Point"`), so Mongo's 2dsphere index
