@@ -273,6 +273,13 @@ export const getBookingById = async (req: AuthRequest, res: Response): Promise<v
       if (staff) staff.phone = null;
     }
 
+    // Attach review so the client can hide "Rate Service" button if already reviewed
+    const existingReview = await Review.findOne(
+      { bookingId: booking._id },
+      "bookingId rating"
+    ).lean();
+    bObj.review = existingReview ?? null;
+
     res.json({ success: true, booking: bObj });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });

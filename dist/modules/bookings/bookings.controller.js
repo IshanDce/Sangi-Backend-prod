@@ -260,6 +260,9 @@ const getBookingById = async (req, res) => {
             if (staff)
                 staff.phone = null;
         }
+        // Attach review so the client can hide "Rate Service" button if already reviewed
+        const existingReview = await Review_1.Review.findOne({ bookingId: booking._id }, "bookingId rating").lean();
+        bObj.review = existingReview ?? null;
         res.json({ success: true, booking: bObj });
     }
     catch (err) {
