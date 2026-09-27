@@ -193,7 +193,29 @@ export const getCustomerBookings = async (req: AuthRequest, res: Response): Prom
       .populate("staffId", "fullName profilePhotoUrl phone")
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, bookings });
+    // Attach review flag so the client can hide "Rate" button for already-reviewed bookings
+    const completedBookingIds = bookings
+      .filter((b) => ["completed", "paymentCompleted"].includes(b.status))
+      .map((b) => b._id);
+
+    const existingReviews = await Review.find(
+      { bookingId: { $in: completedBookingIds } },
+      "bookingId rating"
+    ).lean();
+
+    const reviewMap: Record<string, object> = {};
+    for (const r of existingReviews) {
+      reviewMap[String(r.bookingId)] = r;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bookingsWithReview = bookings.map((b: any) => {
+      const plain = b.toObject();
+      plain.review = reviewMap[String(b._id)] ?? null;
+      return plain;
+    });
+
+    res.json({ success: true, bookings: bookingsWithReview });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
   }

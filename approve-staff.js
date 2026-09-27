@@ -11,7 +11,7 @@ const query = process.argv[2];
 if (!query) {
   console.log("\nUsage: node approve-staff.js \"<name or phone>\"");
   console.log("Examples:");
-  console.log("  node approve-staff.js \"Sanjeev\"");
+  console.log("  node approve-staff.js \"\"");
   console.log("  node approve-staff.js \"9312121655\"");
   process.exit(1);
 }

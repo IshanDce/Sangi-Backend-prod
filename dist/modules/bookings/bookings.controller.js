@@ -185,7 +185,22 @@ const getCustomerBookings = async (req, res) => {
         const bookings = await Booking_1.Booking.find(query)
             .populate("staffId", "fullName profilePhotoUrl phone")
             .sort({ createdAt: -1 });
-        res.json({ success: true, bookings });
+        // Attach review flag so the client can hide "Rate" button for already-reviewed bookings
+        const completedBookingIds = bookings
+            .filter((b) => ["completed", "paymentCompleted"].includes(b.status))
+            .map((b) => b._id);
+        const existingReviews = await Review_1.Review.find({ bookingId: { $in: completedBookingIds } }, "bookingId rating").lean();
+        const reviewMap = {};
+        for (const r of existingReviews) {
+            reviewMap[String(r.bookingId)] = r;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const bookingsWithReview = bookings.map((b) => {
+            const plain = b.toObject();
+            plain.review = reviewMap[String(b._id)] ?? null;
+            return plain;
+        });
+        res.json({ success: true, bookings: bookingsWithReview });
     }
     catch (err) {
         res.status(500).json({ success: false, message: String(err) });
