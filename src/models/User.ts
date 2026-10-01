@@ -15,6 +15,10 @@ export interface IUser extends Document {
   lastKnownLat?: number;
   lastKnownLng?: number;
   lastLocationUpdateAt?: Date;
+  // ─── Referral system ───
+  referralCode: string;
+  referredBy?: mongoose.Types.ObjectId;
+  referralCount: number;
   comparePassword(pw: string): Promise<boolean>;
 }
 
@@ -32,9 +36,27 @@ const UserSchema = new Schema<IUser>(
     lastKnownLat: { type: Number, default: null },
     lastKnownLng: { type: Number, default: null },
     lastLocationUpdateAt: { type: Date, default: null },
+    // ─── Referral system ───
+    referralCode: { type: String, unique: true, sparse: true },
+    referredBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    referralCount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
+
+// Auto-generate unique referral code on user creation
+UserSchema.pre('save', async function () {
+  if (!this.isNew || this.referralCode) return;
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  let exists = true;
+  while (exists) {
+    code = 'SANGI-';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    exists = !!(await mongoose.model('User').findOne({ referralCode: code }));
+  }
+  this.referralCode = code;
+});
 
 UserSchema.methods.comparePassword = async function (pw: string) {
   return bcrypt.compare(pw, this.passwordHash);

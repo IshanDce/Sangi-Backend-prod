@@ -7,6 +7,7 @@ exports.logout = exports.resetPassword = exports.verifyForgotOtp = exports.regis
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const User_1 = require("../../models/User");
+const referral_1 = require("../../helpers/referral");
 const Otp_1 = require("../../models/Otp");
 const otp_1 = require("../../utils/otp");
 const signToken = (id, role) => jsonwebtoken_1.default.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: (process.env.JWT_EXPIRES_IN || "7d") });
@@ -144,7 +145,7 @@ exports.login = login;
 // POST /api/v1/auth/register/customer
 const registerCustomer = async (req, res) => {
     try {
-        const { fullName, email, phone, password } = req.body;
+        const { fullName, email, phone, password, referralCode } = req.body;
         const existing = await User_1.User.findOne({ $or: [{ phone }, { email }] });
         if (existing) {
             res.status(409).json({ success: false, message: "Phone or email already registered" });
@@ -152,6 +153,10 @@ const registerCustomer = async (req, res) => {
         }
         const passwordHash = await bcryptjs_1.default.hash(password, 12);
         const user = await User_1.User.create({ fullName, email, phone, passwordHash, role: "customer" });
+        // Process referral if a code was provided
+        if (referralCode) {
+            await (0, referral_1.processReferral)(String(user._id), referralCode, phone);
+        }
         res.status(201).json({ success: true, message: "Registered. Please verify OTP.", userId: user._id });
     }
     catch (err) {

@@ -12,6 +12,9 @@ export interface IUser extends Document {
     lastKnownLat?: number;
     lastKnownLng?: number;
     lastLocationUpdateAt?: Date;
+    referralCode: string;
+    referredBy?: mongoose.Types.ObjectId;
+    referralCount: number;
     comparePassword(pw: string): Promise<boolean>;
 }
 export declare const User: mongoose.Model<IUser, {}, {}, {}, Document<unknown, {}, IUser, {}, mongoose.DefaultSchemaOptions> & IUser & Required<{

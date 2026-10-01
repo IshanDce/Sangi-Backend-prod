@@ -2,6 +2,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { User } from "../../models/User";
+import { processReferral } from "../../helpers/referral";
 import { Otp } from "../../models/Otp";
 import { generateOtp, sendOtpSms } from "../../utils/otp";
 import { AuthRequest } from "../../middleware/auth";
@@ -152,7 +153,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 // POST /api/v1/auth/register/customer
 export const registerCustomer = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { fullName, email, phone, password } = req.body;
+    const { fullName, email, phone, password, referralCode } = req.body;
     const existing = await User.findOne({ $or: [{ phone }, { email }] });
     if (existing) {
       res.status(409).json({ success: false, message: "Phone or email already registered" });
@@ -160,6 +161,12 @@ export const registerCustomer = async (req: Request, res: Response): Promise<voi
     }
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await User.create({ fullName, email, phone, passwordHash, role: "customer" });
+
+    // Process referral if a code was provided
+    if (referralCode) {
+      await processReferral(String(user._id), referralCode, phone);
+    }
+
     res.status(201).json({ success: true, message: "Registered. Please verify OTP.", userId: user._id });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });

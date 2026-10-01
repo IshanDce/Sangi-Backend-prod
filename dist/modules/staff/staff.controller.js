@@ -8,11 +8,12 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const User_1 = require("../../models/User");
 const StaffProfile_1 = require("../../models/StaffProfile");
 const Review_1 = require("../../models/Review");
+const referral_1 = require("../../helpers/referral");
 const imagekit_1 = require("../../config/imagekit");
 // ─── Step 1: POST /api/v1/staff/register/step1
 const registerStep1 = async (req, res) => {
     try {
-        const { fullName, email, phone, password, experience, about } = req.body;
+        const { fullName, email, phone, password, experience, about, referralCode } = req.body;
         const existing = await User_1.User.findOne({ $or: [{ phone }, { email }] });
         if (existing) {
             res.status(409).json({ success: false, message: "Phone or email already registered" });
@@ -20,6 +21,10 @@ const registerStep1 = async (req, res) => {
         }
         const passwordHash = await bcryptjs_1.default.hash(password, 12);
         const user = await User_1.User.create({ fullName, email, phone, passwordHash, role: "staff" });
+        // Process referral if a code was provided
+        if (referralCode) {
+            await (0, referral_1.processReferral)(String(user._id), referralCode, phone);
+        }
         // No default coords — staff must push real GPS to appear in search
         const staffProfile = await StaffProfile_1.StaffProfile.create({ userId: user._id, experience, about });
         res.status(201).json({ success: true, message: "Step 1 complete. Verify OTP.", userId: user._id, staffProfileId: staffProfile._id });

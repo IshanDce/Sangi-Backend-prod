@@ -7,7 +7,7 @@ export interface ITransaction extends Document {
   subtitle?: string;
   amount: number;
   isCredit: boolean;
-  type: 'bookingFee'|'servicePayment'|'walletTopup'|'refund'|'withdrawal'|'adjustment';
+  type: 'bookingFee'|'servicePayment'|'walletTopup'|'refund'|'withdrawal'|'adjustment'|'referral';
   status: 'pending'|'completed'|'failed';
   razorpayRef?: string;
 }
@@ -20,7 +20,7 @@ const TransactionSchema = new Schema<ITransaction>(
     subtitle: String,
     amount: { type: Number, required: true },
     isCredit: { type: Boolean, required: true },
-    type: { type: String, enum: ['bookingFee','servicePayment','walletTopup','refund','withdrawal','adjustment'], required: true },
+    type: { type: String, enum: ['bookingFee','servicePayment','walletTopup','refund','withdrawal','adjustment','referral'], required: true },
     status: { type: String, enum: ['pending','completed','failed'], default: 'completed' },
     razorpayRef: String,
   },

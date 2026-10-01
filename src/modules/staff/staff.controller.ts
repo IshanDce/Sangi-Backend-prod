@@ -4,17 +4,23 @@ import { User } from "../../models/User";
 import { StaffProfile } from "../../models/StaffProfile";
 import { Review } from "../../models/Review";
 import { AuthRequest } from "../../middleware/auth";
+import { processReferral } from "../../helpers/referral";
 import { imagekit } from "../../config/imagekit";
 
 // ─── Step 1: POST /api/v1/staff/register/step1
 export const registerStep1 = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { fullName, email, phone, password, experience, about } = req.body;
+    const { fullName, email, phone, password, experience, about, referralCode } = req.body;
     const existing = await User.findOne({ $or: [{ phone }, { email }] });
     if (existing) { res.status(409).json({ success: false, message: "Phone or email already registered" }); return; }
 
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await User.create({ fullName, email, phone, passwordHash, role: "staff" });
+
+    // Process referral if a code was provided
+    if (referralCode) {
+      await processReferral(String(user._id), referralCode, phone);
+    }
     // No default coords — staff must push real GPS to appear in search
     const staffProfile = await StaffProfile.create({ userId: user._id, experience, about });
 

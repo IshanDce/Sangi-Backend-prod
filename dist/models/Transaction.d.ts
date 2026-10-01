@@ -6,7 +6,7 @@ export interface ITransaction extends Document {
     subtitle?: string;
     amount: number;
     isCredit: boolean;
-    type: 'bookingFee' | 'servicePayment' | 'walletTopup' | 'refund' | 'withdrawal' | 'adjustment';
+    type: 'bookingFee' | 'servicePayment' | 'walletTopup' | 'refund' | 'withdrawal' | 'adjustment' | 'referral';
     status: 'pending' | 'completed' | 'failed';
     razorpayRef?: string;
 }

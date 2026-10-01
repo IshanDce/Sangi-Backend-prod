@@ -33,18 +33,17 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Transaction = void 0;
+exports.Referral = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
-const TransactionSchema = new mongoose_1.Schema({
-    userId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
-    bookingId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Booking', default: null },
-    title: { type: String, required: true },
-    subtitle: String,
-    amount: { type: Number, required: true },
-    isCredit: { type: Boolean, required: true },
-    type: { type: String, enum: ['bookingFee', 'servicePayment', 'walletTopup', 'refund', 'withdrawal', 'adjustment', 'referral'], required: true },
-    status: { type: String, enum: ['pending', 'completed', 'failed'], default: 'completed' },
-    razorpayRef: String,
+const ReferralSchema = new mongoose_1.Schema({
+    referrerId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
+    refereeId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
+    referralCode: { type: String, required: true },
+    rewardAmount: { type: Number, required: true, default: 50 },
+    status: { type: String, enum: ['pending', 'completed', 'failed'], default: 'pending' },
+    creditedAt: { type: Date, default: null },
 }, { timestamps: true });
-exports.Transaction = mongoose_1.default.model('Transaction', TransactionSchema);
-//# sourceMappingURL=Transaction.js.map
+// Prevent duplicate referrals
+ReferralSchema.index({ refereeId: 1 }, { unique: true });
+exports.Referral = mongoose_1.default.model('Referral', ReferralSchema);
+//# sourceMappingURL=Referral.js.map
