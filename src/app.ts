@@ -15,6 +15,7 @@ import bookingRoutes from "./modules/bookings/bookings.routes";
 import walletRoutes from "./modules/wallet/wallet.routes";
 import notificationRoutes from "./modules/notifications/notifications.routes";
 import webhookRoutes from "./modules/webhooks/webhooks.routes";
+import referralRoutes from "./modules/referral/referral.routes";
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use("/api/v1/staff", staffRoutes);
 app.use("/api/v1/bookings", bookingRoutes);
 app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/referral", referralRoutes);
 
 // ─── Health Check ───
 app.get("/health", (_req, res) => {
