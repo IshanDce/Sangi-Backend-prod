@@ -85,12 +85,13 @@ export const registerStep4Kyc = async (req: AuthRequest, res: Response): Promise
   }
 };
 
-// ─── GET /api/v1/staff/search?service=X&lat=Y&lng=Z
+// ─── GET /api/v1/staff/search?service=X&lat=Y&lng=Z&radius=20
 // Falls back to caller's last-known location (lastLocationUpdateAt < 30 min ago)
 // if lat/lng are not provided in the query — keeps the km shown in customer app accurate.
+// radius (optional) — search radius in km, default 20, clamped 5–50.
 export const searchStaff = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { service, lat, lng } = req.query;
+    const { service, lat, lng, radius } = req.query;
     const matchStage: Record<string, unknown> = { kycStatus: { $in: ["approved", "pending", "not_submitted"] } };
     if (service) matchStage.services = service;
 
@@ -127,7 +128,9 @@ export const searchStaff = async (req: Request, res: Response): Promise<void> =>
     let staffProfiles: any[];
 
     if (latitude !== undefined && longitude !== undefined) {
-      const MAX_DISTANCE_METERS = 10000; // 10km
+      // Radius from client (km), default 20, clamped 5–50
+      const radiusKm = Math.min(50, Math.max(5, radius ? parseFloat(radius as string) || 20 : 20));
+      const MAX_DISTANCE_METERS = radiusKm * 1000;
       const STALE_MS = 30 * 60 * 1000; // 30 min — staff must have pushed location recently
       const freshEnough = new Date(Date.now() - STALE_MS);
 
