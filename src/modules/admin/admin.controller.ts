@@ -283,16 +283,21 @@ export const getStaff = async (req: AuthRequest, res: Response): Promise<void> =
     const profiles = await StaffProfile.find(profileQuery);
     const profileMap = new Map(profiles.map((p) => [p.userId.toString(), p]));
 
-    // Match filtered results
-    let matched = staffUsers
-      .filter((u) => profileMap.has(u._id.toString()))
-      .map((u) => {
-        const p = profileMap.get(u._id.toString())!;
-        return {
+    // Match filtered results (include all staff if kycStatus not filtered)
+    let matched: any[] = [];
+    if (kycStatus && kycStatus !== 'all') {
+      matched = staffUsers
+        .filter((u) => profileMap.has(u._id.toString()))
+        .map((u) => ({
           ...u.toObject(),
-          profile: p,
-        };
-      });
+          profile: profileMap.get(u._id.toString()),
+        }));
+    } else {
+      matched = staffUsers.map((u) => ({
+        ...u.toObject(),
+        profile: profileMap.get(u._id.toString()) || null,
+      }));
+    }
 
     const total = matched.length;
     const skip = (Number(page) - 1) * Number(limit);
