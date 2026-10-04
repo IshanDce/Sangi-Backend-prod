@@ -44,7 +44,7 @@ const UserSchema = new mongoose_1.Schema({
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     phone: { type: String, required: true, unique: true, trim: true },
     passwordHash: { type: String, required: true },
-    role: { type: String, enum: ['customer', 'staff'], required: true },
+    role: { type: String, enum: ['customer', 'staff', 'admin'], required: true },
     profilePhotoUrl: { type: String, default: null },
     isPhoneVerified: { type: Boolean, default: false },
     fcmToken: { type: String, default: null },
@@ -56,6 +56,18 @@ const UserSchema = new mongoose_1.Schema({
     referralCode: { type: String, unique: true, sparse: true },
     referredBy: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', default: null },
     referralCount: { type: Number, default: 0 },
+    // ─── Admin Controls ───
+    isBlocked: { type: Boolean, default: false },
+    blockReason: { type: String, default: null },
+    blockedAt: { type: Date, default: null },
+    // ─── Bank details ───
+    bankAccount: {
+        accountHolderName: String,
+        accountNumber: String,
+        ifscCode: String,
+        bankName: String,
+        upiId: String,
+    },
 }, { timestamps: true });
 // Auto-generate unique referral code on user creation
 UserSchema.pre('save', async function () {

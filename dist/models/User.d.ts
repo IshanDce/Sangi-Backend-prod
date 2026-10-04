@@ -4,7 +4,7 @@ export interface IUser extends Document {
     email: string;
     phone: string;
     passwordHash: string;
-    role: 'customer' | 'staff';
+    role: 'customer' | 'staff' | 'admin';
     profilePhotoUrl?: string;
     isPhoneVerified: boolean;
     fcmToken?: string;
@@ -15,6 +15,16 @@ export interface IUser extends Document {
     referralCode: string;
     referredBy?: mongoose.Types.ObjectId;
     referralCount: number;
+    isBlocked: boolean;
+    blockReason?: string;
+    blockedAt?: Date;
+    bankAccount?: {
+        accountHolderName?: string;
+        accountNumber?: string;
+        ifscCode?: string;
+        bankName?: string;
+        upiId?: string;
+    };
     comparePassword(pw: string): Promise<boolean>;
 }
 export declare const User: mongoose.Model<IUser, {}, {}, {}, Document<unknown, {}, IUser, {}, mongoose.DefaultSchemaOptions> & IUser & Required<{

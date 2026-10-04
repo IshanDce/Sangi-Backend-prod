@@ -6,7 +6,7 @@ export interface IUser extends Document {
   email: string;
   phone: string;
   passwordHash: string;
-  role: 'customer' | 'staff';
+  role: 'customer' | 'staff' | 'admin';
   profilePhotoUrl?: string;
   isPhoneVerified: boolean;
   fcmToken?: string;
@@ -19,6 +19,18 @@ export interface IUser extends Document {
   referralCode: string;
   referredBy?: mongoose.Types.ObjectId;
   referralCount: number;
+  // ─── Admin Controls ───
+  isBlocked: boolean;
+  blockReason?: string;
+  blockedAt?: Date;
+  // ─── Bank / Payout details ───
+  bankAccount?: {
+    accountHolderName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    bankName?: string;
+    upiId?: string;
+  };
   comparePassword(pw: string): Promise<boolean>;
 }
 
@@ -28,7 +40,7 @@ const UserSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     phone: { type: String, required: true, unique: true, trim: true },
     passwordHash: { type: String, required: true },
-    role: { type: String, enum: ['customer', 'staff'], required: true },
+    role: { type: String, enum: ['customer', 'staff', 'admin'], required: true },
     profilePhotoUrl: { type: String, default: null },
     isPhoneVerified: { type: Boolean, default: false },
     fcmToken: { type: String, default: null },
@@ -40,6 +52,18 @@ const UserSchema = new Schema<IUser>(
     referralCode: { type: String, unique: true, sparse: true },
     referredBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     referralCount: { type: Number, default: 0 },
+    // ─── Admin Controls ───
+    isBlocked: { type: Boolean, default: false },
+    blockReason: { type: String, default: null },
+    blockedAt: { type: Date, default: null },
+    // ─── Bank details ───
+    bankAccount: {
+      accountHolderName: String,
+      accountNumber: String,
+      ifscCode: String,
+      bankName: String,
+      upiId: String,
+    },
   },
   { timestamps: true }
 );

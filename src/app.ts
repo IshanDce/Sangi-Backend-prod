@@ -16,6 +16,8 @@ import walletRoutes from "./modules/wallet/wallet.routes";
 import notificationRoutes from "./modules/notifications/notifications.routes";
 import webhookRoutes from "./modules/webhooks/webhooks.routes";
 import referralRoutes from "./modules/referral/referral.routes";
+import adminRoutes from "./modules/admin/admin.routes";
+import { getServices } from "./modules/admin/admin.controller";
 
 const app = express();
 
@@ -41,6 +43,8 @@ app.use("/api/v1/bookings", bookingRoutes);
 app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/referral", referralRoutes);
+app.use("/api/v1/admin", adminRoutes);
+app.get("/api/v1/services", getServices);
 
 // ─── Health Check ───
 app.get("/health", (_req, res) => {

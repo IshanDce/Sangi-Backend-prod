@@ -19,6 +19,8 @@ const wallet_routes_1 = __importDefault(require("./modules/wallet/wallet.routes"
 const notifications_routes_1 = __importDefault(require("./modules/notifications/notifications.routes"));
 const webhooks_routes_1 = __importDefault(require("./modules/webhooks/webhooks.routes"));
 const referral_routes_1 = __importDefault(require("./modules/referral/referral.routes"));
+const admin_routes_1 = __importDefault(require("./modules/admin/admin.routes"));
+const admin_controller_1 = require("./modules/admin/admin.controller");
 const app = (0, express_1.default)();
 // ─── Security & Parsing ───
 app.use((0, helmet_1.default)());
@@ -38,6 +40,8 @@ app.use("/api/v1/bookings", bookings_routes_1.default);
 app.use("/api/v1/wallet", wallet_routes_1.default);
 app.use("/api/v1/notifications", notifications_routes_1.default);
 app.use("/api/v1/referral", referral_routes_1.default);
+app.use("/api/v1/admin", admin_routes_1.default);
+app.get("/api/v1/services", admin_controller_1.getServices);
 // ─── Health Check ───
 app.get("/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });

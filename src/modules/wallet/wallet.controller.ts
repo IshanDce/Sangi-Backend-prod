@@ -1,3 +1,5 @@
+import { WithdrawalRequest, IWithdrawalRequest } from "../../models/WithdrawalRequest";
+import { StaffProfile } from "../../models/StaffProfile";
 import { Response } from "express";
 import { AuthRequest } from "../../middleware/auth";
 import { User } from "../../models/User";
@@ -111,11 +113,38 @@ export const withdraw = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
+    if (numericAmount < 100) {
+      res.status(400).json({ success: false, message: "Minimum withdrawal amount is ₹100" });
+      return;
+    }
+
     const user = await User.findById(req.user!.id);
     if (!user) { res.status(404).json({ success: false, message: "User not found" }); return; }
     if (user.walletBalance < numericAmount) {
       res.status(400).json({ success: false, message: "Insufficient wallet balance" });
       return;
+    }
+
+    // Capture account snapshot
+    let accountDetails: any = {};
+    if (user.role === 'staff') {
+      const sp = await StaffProfile.findOne({ userId: user._id });
+      if (sp?.bankAccount) {
+        accountDetails = {
+          bankName: sp.bankAccount.bankName,
+          accountHolderName: sp.bankAccount.accountHolderName || user.fullName,
+          accountNumber: sp.bankAccount.accountNumber,
+          ifscCode: sp.bankAccount.ifscCode,
+        };
+      }
+    } else if (user.bankAccount) {
+      accountDetails = {
+        bankName: user.bankAccount.bankName,
+        accountHolderName: user.bankAccount.accountHolderName || user.fullName,
+        accountNumber: user.bankAccount.accountNumber,
+        ifscCode: user.bankAccount.ifscCode,
+        upiId: user.bankAccount.upiId,
+      };
     }
 
     const updatedUser = await User.findByIdAndUpdate(
@@ -124,26 +153,40 @@ export const withdraw = async (req: AuthRequest, res: Response): Promise<void> =
       { new: true }
     );
 
+    const withdrawalDoc = (await WithdrawalRequest.create({
+      userId: user._id,
+      userRole: user.role,
+      amount: numericAmount,
+      payoutMethod: accountDetails.upiId ? 'upi' : 'bank',
+      accountDetails,
+      status: 'pending',
+    })) as unknown as IWithdrawalRequest;
+
     await Transaction.create({
       userId: req.user!.id,
       title: "Withdrawal",
-      subtitle: `₹${numericAmount} transferred to bank`,
+      subtitle: `₹${numericAmount} payout request submitted (${withdrawalDoc.withdrawalNumber})`,
       amount: numericAmount,
       isCredit: false,
       type: "withdrawal",
-      status: "completed",
+      status: "pending",
     });
 
     // Send push notification if token available
     await sendPushNotification({
       userId: req.user!.id,
       fcmToken: user.fcmToken,
-      title: "Withdrawal Successful 🏦",
-      body: `₹${numericAmount} transferred to your bank account`,
-      type: "withdrawalSuccess",
+      title: "Withdrawal Request Received 🏦",
+      body: `₹${numericAmount} withdrawal request submitted. Will be processed within 24 hours.`,
+      type: "withdrawal_pending",
     });
 
-    res.json({ success: true, message: `₹${numericAmount} withdrawal initiated`, newBalance: updatedUser?.walletBalance ?? 0 });
+    res.json({
+      success: true,
+      message: `₹${numericAmount} withdrawal initiated and submitted for processing.`,
+      withdrawalNumber: withdrawalDoc.withdrawalNumber,
+      newBalance: updatedUser?.walletBalance ?? 0,
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
   }
