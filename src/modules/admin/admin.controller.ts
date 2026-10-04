@@ -951,29 +951,42 @@ export const sendNotification = async (req: AuthRequest, res: Response): Promise
     }
 
     if (!target) {
-      res.status(400).json({ success: false, message: "Target must be 'all_customers', 'all_staff', 'all_users', or 'single_user'" });
+      res.status(400).json({
+        success: false,
+        message: "Target must be 'all_customers', 'all_staff', 'all', 'all_users', 'single', or 'single_user'",
+      });
       return;
     }
 
     let targetUsers: IUser[] = [];
 
-    if (target === 'single_user') {
+    if (target === 'single' || target === 'single_user') {
       if (!userId) {
-        res.status(400).json({ success: false, message: "userId is required when target is 'single_user'" });
+        res.status(400).json({ success: false, message: "userId or phone is required when target is single user" });
         return;
       }
-      const u = await User.findById(userId);
+      let u: IUser | null = null;
+      if (mongoose.Types.ObjectId.isValid(userId)) {
+        u = await User.findById(userId);
+      }
       if (!u) {
-        res.status(404).json({ success: false, message: 'User not found' });
+        u = await User.findOne({ phone: userId });
+      }
+      if (!u) {
+        const cleanPhone = userId.replace(/^\+91/, '').trim();
+        u = await User.findOne({ $or: [{ phone: cleanPhone }, { phone: `+91${cleanPhone}` }] });
+      }
+      if (!u) {
+        res.status(404).json({ success: false, message: `User not found with ID/Phone: ${userId}` });
         return;
       }
       targetUsers = [u];
     } else if (target === 'all_customers') {
-      targetUsers = await User.find({ role: 'customer', isBlocked: false });
+      targetUsers = await User.find({ role: 'customer', isBlocked: { $ne: true } });
     } else if (target === 'all_staff') {
-      targetUsers = await User.find({ role: 'staff', isBlocked: false });
-    } else if (target === 'all_users') {
-      targetUsers = await User.find({ role: { $in: ['customer', 'staff'] }, isBlocked: false });
+      targetUsers = await User.find({ role: 'staff', isBlocked: { $ne: true } });
+    } else if (target === 'all' || target === 'all_users') {
+      targetUsers = await User.find({ role: { $in: ['customer', 'staff'] }, isBlocked: { $ne: true } });
     }
 
     if (targetUsers.length === 0) {
@@ -981,36 +994,31 @@ export const sendNotification = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    // 1. Create in-app notification records
-    const notifDocs = targetUsers.map((u) => ({
-      userId: u._id,
-      title: title.trim(),
-      message: message.trim(),
-      type: type || 'admin_announcement',
-      isRead: false,
-    }));
-    await Notification.insertMany(notifDocs);
-
-    // 2. Dispatch FCM push to users with tokens
+    // Dispatch FCM push & in-app notification records cleanly
     let pushedCount = 0;
-    for (const u of targetUsers) {
-      if (u.fcmToken) {
-        try {
-          await sendPushNotification({
-            userId: u._id.toString(),
-            fcmToken: u.fcmToken,
-            title: title.trim(),
-            body: message.trim(),
-            type: type || 'admin_announcement',
-          });
+    const sendPromises = targetUsers.map(async (u) => {
+      try {
+        await sendPushNotification({
+          userId: u._id.toString(),
+          fcmToken: u.fcmToken || null,
+          title: title.trim(),
+          body: message.trim(),
+          type: type || 'admin_announcement',
+          metadata: { target },
+        });
+        if (u.fcmToken) {
           pushedCount++;
-        } catch (_) {}
+        }
+      } catch (pushErr) {
+        console.error(`[Admin Notification] Failed to send to ${u._id}:`, pushErr);
       }
-    }
+    });
+
+    await Promise.allSettled(sendPromises);
 
     res.json({
       success: true,
-      message: `Notification delivered to ${targetUsers.length} user(s) (Push sent to ${pushedCount} active devices).`,
+      message: `Notification delivered to ${targetUsers.length} user(s) (FCM push sent to ${pushedCount} active devices).`,
       totalRecipients: targetUsers.length,
       pushedCount,
     });
