@@ -705,16 +705,72 @@ export const getWithdrawals = async (req: AuthRequest, res: Response): Promise<v
     const skip = (Number(page) - 1) * Number(limit);
     const [withdrawals, total] = await Promise.all([
       WithdrawalRequest.find(query)
-        .populate('userId', 'fullName phone email role walletBalance')
+        .populate('userId', 'fullName phone email role walletBalance bankAccount')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(limit)),
       WithdrawalRequest.countDocuments(query),
     ]);
 
+    const userIds = withdrawals.map((w: any) => w.userId?._id || w.userId).filter(Boolean);
+    const staffProfiles = await StaffProfile.find({ userId: { $in: userIds } });
+    const staffMap = new Map();
+    for (const sp of staffProfiles) {
+      staffMap.set(sp.userId.toString(), sp);
+    }
+
+    const mapped = withdrawals.map((w: any) => {
+      const u = w.userId;
+      const uidStr = u?._id?.toString() || u?.toString();
+      const sp = uidStr ? staffMap.get(uidStr) : null;
+
+      let acc = w.accountDetails ? { ...w.accountDetails } : {};
+      if (!acc.accountNumber && !acc.upiId) {
+        if (sp?.bankAccount && (sp.bankAccount.accountNumber || sp.bankAccount.upiId)) {
+          acc = {
+            bankName: sp.bankAccount.bankName || 'Bank',
+            accountHolderName: sp.bankAccount.accountHolderName || u?.fullName || '',
+            accountNumber: sp.bankAccount.accountNumber || '',
+            ifscCode: sp.bankAccount.ifscCode || '',
+            upiId: sp.bankAccount.upiId || '',
+          };
+        } else if (u?.bankAccount && (u.bankAccount.accountNumber || u.bankAccount.upiId)) {
+          acc = {
+            bankName: u.bankAccount.bankName || 'Bank',
+            accountHolderName: u.bankAccount.accountHolderName || u.fullName || '',
+            accountNumber: u.bankAccount.accountNumber || '',
+            ifscCode: u.bankAccount.ifscCode || '',
+            upiId: u.bankAccount.upiId || '',
+          };
+        }
+      }
+
+      const userObj = u && typeof u === 'object' ? {
+        _id: u._id,
+        fullName: u.fullName || 'User',
+        phone: u.phone || '',
+        email: u.email || '',
+        role: u.role || w.userRole,
+        walletBalance: u.walletBalance ?? 0,
+      } : null;
+
+      return {
+        ...w.toObject(),
+        user: userObj,
+        userId: userObj || w.userId,
+        accountDetails: {
+          bankName: acc.bankName || 'Bank',
+          accountHolderName: acc.accountHolderName || u?.fullName || 'User',
+          accountNumber: acc.accountNumber || '',
+          ifscCode: acc.ifscCode || '',
+          upiId: acc.upiId || '',
+        },
+      };
+    });
+
     res.json({
       success: true,
-      withdrawals,
+      withdrawals: mapped,
       pagination: {
         total,
         page: Number(page),
@@ -870,15 +926,15 @@ export const rejectWithdrawal = async (req: AuthRequest, res: Response): Promise
 // GET /api/v1/admin/bank-accounts
 export const getBankAccounts = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const [staffProfiles, customerUsers] = await Promise.all([
+    const [staffProfiles, allUsers] = await Promise.all([
       StaffProfile.find({
         $or: [
           { 'bankAccount.accountNumber': { $exists: true, $ne: '' } },
           { 'bankAccount.ifscCode': { $exists: true, $ne: '' } },
+          { 'bankAccount.upiId': { $exists: true, $ne: '' } },
         ],
-      }).populate('userId', 'fullName phone email role walletBalance isBlocked'),
+      }).populate('userId', 'fullName phone email role walletBalance isBlocked bankAccount'),
       User.find({
-        role: 'customer',
         $or: [
           { 'bankAccount.accountNumber': { $exists: true, $ne: '' } },
           { 'bankAccount.upiId': { $exists: true, $ne: '' } },
@@ -887,46 +943,87 @@ export const getBankAccounts = async (req: AuthRequest, res: Response): Promise<
     ]);
 
     const accounts: any[] = [];
+    const seenUserIds = new Set<string>();
 
-    // Staff accounts
+    // Staff accounts from StaffProfile
     for (const sp of staffProfiles) {
       const u = sp.userId as any;
       if (!u) continue;
+      const uidStr = u._id.toString();
+      seenUserIds.add(uidStr);
+
+      const bankName = sp.bankAccount?.bankName || u.bankAccount?.bankName || 'Bank';
+      const accountHolderName = sp.bankAccount?.accountHolderName || u.bankAccount?.accountHolderName || u.fullName;
+      const accountNumber = sp.bankAccount?.accountNumber || u.bankAccount?.accountNumber || '';
+      const ifscCode = sp.bankAccount?.ifscCode || u.bankAccount?.ifscCode || '';
+      const upiId = (sp.bankAccount as any)?.upiId || u.bankAccount?.upiId || '';
+
+      const bankAccObj = {
+        bankName,
+        accountHolderName,
+        accountNumber,
+        ifscCode,
+        upiId,
+      };
+
       accounts.push({
+        _id: sp._id,
         id: sp._id,
         userId: u._id,
         fullName: u.fullName,
         phone: u.phone,
         email: u.email,
         role: 'staff',
-        walletBalance: u.walletBalance,
-        isBlocked: u.isBlocked,
-        bankName: sp.bankAccount?.bankName || 'Bank',
-        accountHolderName: sp.bankAccount?.accountHolderName || u.fullName,
-        accountNumber: sp.bankAccount?.accountNumber || '',
-        ifscCode: sp.bankAccount?.ifscCode || '',
-        upiId: (sp.bankAccount as any)?.upiId || '',
-        updatedAt: (sp as any).updatedAt,
+        walletBalance: u.walletBalance ?? 0,
+        isBlocked: Boolean(u.isBlocked),
+        bankName,
+        accountHolderName,
+        accountNumber,
+        ifscCode,
+        upiId,
+        bankAccount: bankAccObj,
+        updatedAt: (sp as any).updatedAt || new Date(),
       });
     }
 
-    // Customer accounts
-    for (const cu of customerUsers) {
+    // All Users (Customer or Staff) who have bankAccount in User document
+    for (const u of allUsers) {
+      const uidStr = u._id.toString();
+      if (seenUserIds.has(uidStr)) continue;
+      seenUserIds.add(uidStr);
+
+      const b = u.bankAccount || {};
+      const bankName = b.bankName || 'Bank';
+      const accountHolderName = b.accountHolderName || u.fullName;
+      const accountNumber = b.accountNumber || '';
+      const ifscCode = b.ifscCode || '';
+      const upiId = b.upiId || '';
+
+      const bankAccObj = {
+        bankName,
+        accountHolderName,
+        accountNumber,
+        ifscCode,
+        upiId,
+      };
+
       accounts.push({
-        id: cu._id,
-        userId: cu._id,
-        fullName: cu.fullName,
-        phone: cu.phone,
-        email: cu.email,
-        role: 'customer',
-        walletBalance: cu.walletBalance,
-        isBlocked: cu.isBlocked,
-        bankName: cu.bankAccount?.bankName || 'Bank',
-        accountHolderName: cu.bankAccount?.accountHolderName || cu.fullName,
-        accountNumber: cu.bankAccount?.accountNumber || '',
-        ifscCode: cu.bankAccount?.ifscCode || '',
-        upiId: cu.bankAccount?.upiId || '',
-        updatedAt: (cu as any).updatedAt,
+        _id: u._id,
+        id: u._id,
+        userId: u._id,
+        fullName: u.fullName,
+        phone: u.phone,
+        email: u.email,
+        role: u.role,
+        walletBalance: u.walletBalance ?? 0,
+        isBlocked: Boolean(u.isBlocked),
+        bankName,
+        accountHolderName,
+        accountNumber,
+        ifscCode,
+        upiId,
+        bankAccount: bankAccObj,
+        updatedAt: (u as any).updatedAt || new Date(),
       });
     }
 
