@@ -554,10 +554,17 @@ exports.getBookingById = getBookingById;
 // 7. SERVICES & BOOKING PRICING MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════
 // GET /api/v1/admin/services & GET /api/v1/services (Public)
-const getServices = async (_req, res) => {
+const getServices = async (req, res) => {
     try {
-        const services = await Service_1.Service.find().sort({ sortOrder: 1, createdAt: 1 });
-        res.json({ success: true, services });
+        const isAdmin = Boolean(req.originalUrl?.includes('/admin') ||
+            req.baseUrl?.includes('/admin') ||
+            req.path?.includes('/admin') ||
+            req.query.all === 'true');
+        // If admin requests, return all services (both active & inactive).
+        // If mobile app requests (/api/v1/services), return only active services!
+        const query = isAdmin ? {} : { isActive: true };
+        const services = await Service_1.Service.find(query).sort({ sortOrder: 1, createdAt: 1 });
+        res.json({ success: true, count: services.length, services });
     }
     catch (err) {
         res.status(500).json({ success: false, message: err.message });

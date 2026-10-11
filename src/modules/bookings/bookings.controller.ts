@@ -1,3 +1,4 @@
+import { Service } from "../../models/Service";
 import { Response } from "express";
 import { imagekit } from "../../config/imagekit";
 import { AuthRequest } from "../../middleware/auth";
@@ -82,6 +83,24 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
     }
     // ─────────────────────────────────────────────────────────────────────────
 
+    // Look up service in Service catalog for dynamic booking fee and active status
+    let dynamicBookingFee = BOOKING_FEE;
+    if (service) {
+      const serviceDoc = await Service.findOne({ slug: String(service).toLowerCase().trim() });
+      if (serviceDoc) {
+        if (!serviceDoc.isActive) {
+          res.status(400).json({
+            success: false,
+            message: `Service "${serviceDoc.name}" is currently inactive and not available for booking.`,
+          });
+          return;
+        }
+        if (serviceDoc.bookingFee !== undefined && serviceDoc.bookingFee !== null) {
+          dynamicBookingFee = Number(serviceDoc.bookingFee);
+        }
+      }
+    }
+
     const booking = await Booking.create({
       customerId: req.user!.id,
       staffId,
@@ -92,7 +111,7 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
       coordinates: lat && lng ? { lat, lng } : undefined,
       notes,
       status: "pendingPayment",
-      bookingFee: BOOKING_FEE,
+      bookingFee: dynamicBookingFee,
     });
 
     let order: { id: string };
@@ -101,7 +120,7 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
         order = { id: `order_mock_${booking._id}_${Date.now()}` };
       } else {
         order = await razorpay.orders.create({
-          amount: BOOKING_FEE * 100, // paise
+          amount: Math.round(dynamicBookingFee * 100), // paise
           currency: "INR",
           receipt: String(booking._id),
         });

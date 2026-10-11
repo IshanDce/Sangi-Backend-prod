@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getStaffAvailability = exports.createServicePaymentOrder = exports.completeBookingWithReview = exports.payServiceFee = exports.completeService = exports.startService = exports.cancelBooking = exports.declineBooking = exports.acceptBooking = exports.getBookingById = exports.getStaffBookings = exports.getCustomerBookings = exports.confirmBookingPayment = exports.createOrder = void 0;
+const Service_1 = require("../../models/Service");
 const imagekit_1 = require("../../config/imagekit");
 const Booking_1 = require("../../models/Booking");
 const Transaction_1 = require("../../models/Transaction");
@@ -76,6 +77,23 @@ const createOrder = async (req, res) => {
             }
         }
         // ─────────────────────────────────────────────────────────────────────────
+        // Look up service in Service catalog for dynamic booking fee and active status
+        let dynamicBookingFee = BOOKING_FEE;
+        if (service) {
+            const serviceDoc = await Service_1.Service.findOne({ slug: String(service).toLowerCase().trim() });
+            if (serviceDoc) {
+                if (!serviceDoc.isActive) {
+                    res.status(400).json({
+                        success: false,
+                        message: `Service "${serviceDoc.name}" is currently inactive and not available for booking.`,
+                    });
+                    return;
+                }
+                if (serviceDoc.bookingFee !== undefined && serviceDoc.bookingFee !== null) {
+                    dynamicBookingFee = Number(serviceDoc.bookingFee);
+                }
+            }
+        }
         const booking = await Booking_1.Booking.create({
             customerId: req.user.id,
             staffId,
@@ -86,7 +104,7 @@ const createOrder = async (req, res) => {
             coordinates: lat && lng ? { lat, lng } : undefined,
             notes,
             status: "pendingPayment",
-            bookingFee: BOOKING_FEE,
+            bookingFee: dynamicBookingFee,
         });
         let order;
         try {
@@ -95,7 +113,7 @@ const createOrder = async (req, res) => {
             }
             else {
                 order = await razorpay_1.razorpay.orders.create({
-                    amount: BOOKING_FEE * 100, // paise
+                    amount: Math.round(dynamicBookingFee * 100), // paise
                     currency: "INR",
                     receipt: String(booking._id),
                 });
