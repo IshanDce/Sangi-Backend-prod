@@ -302,25 +302,48 @@ export const updateMyAvailability = async (req: AuthRequest, res: Response): Pro
 export const updateBankAccount = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { accountHolderName, accountNumber, ifscCode, bankName, upiId } = req.body;
+    const profile = await StaffProfile.findOne({ userId: req.user!.id });
+    const user = await User.findById(req.user!.id);
+
+    const existingStaffBank = (profile?.bankAccount as any) || {};
+    const existingUserBank = user?.bankAccount || {};
+
     const bankDetails = {
-      accountHolderName,
-      accountNumber: accountNumber || '',
-      ifscCode: ifscCode || '',
-      bankName: bankName || 'Bank',
-      upiId: upiId || '',
+      accountHolderName: (accountHolderName && String(accountHolderName).trim())
+        ? String(accountHolderName).trim()
+        : (existingStaffBank.accountHolderName || existingUserBank.accountHolderName || user?.fullName || 'Staff'),
+      accountNumber: (accountNumber !== undefined && accountNumber !== null && String(accountNumber).trim() !== '')
+        ? String(accountNumber).trim()
+        : (existingStaffBank.accountNumber || existingUserBank.accountNumber || ''),
+      ifscCode: (ifscCode !== undefined && ifscCode !== null && String(ifscCode).trim() !== '')
+        ? String(ifscCode).trim().toUpperCase()
+        : (existingStaffBank.ifscCode || existingUserBank.ifscCode || ''),
+      bankName: (bankName !== undefined && bankName !== null && String(bankName).trim() !== '')
+        ? String(bankName).trim()
+        : (existingStaffBank.bankName || existingUserBank.bankName || 'Bank'),
+      upiId: (upiId !== undefined && upiId !== null && String(upiId).trim() !== '')
+        ? String(upiId).trim()
+        : (existingStaffBank.upiId || existingUserBank.upiId || ''),
     };
-    const profile = await StaffProfile.findOneAndUpdate(
+
+    const updatedProfile = await StaffProfile.findOneAndUpdate(
       { userId: req.user!.id },
       { bankAccount: bankDetails },
       { new: true }
     );
-    res.json({ success: true, profile });
+
+    if (user) {
+      user.bankAccount = bankDetails;
+      await user.save();
+    }
+
+    res.json({ success: true, profile: updatedProfile, bankAccount: bankDetails });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
   }
 };
 
-// ─── PUT /api/v1/staff/me/location  (called by app every 3 min)
+// 📍 Location update
 export const updateMyLocation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { lat, lng } = req.body;

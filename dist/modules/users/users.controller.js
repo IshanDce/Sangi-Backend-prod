@@ -146,19 +146,42 @@ const updateMyBankAccount = async (req, res) => {
             res.status(404).json({ success: false, message: "User not found" });
             return;
         }
+        const existingUserBank = user.bankAccount || {};
+        let existingStaffBank = {};
+        if (user.role === 'staff') {
+            const sp = await StaffProfile_1.StaffProfile.findOne({ userId: user._id });
+            if (sp?.bankAccount) {
+                existingStaffBank = sp.bankAccount;
+            }
+        }
+        // Merge non-empty fields cleanly so updating UPI never deletes Bank details, and vice versa!
         const updatedAccount = {
-            accountHolderName: accountHolderName || user.fullName,
-            accountNumber: accountNumber || '',
-            ifscCode: ifscCode || '',
-            bankName: bankName || 'Bank',
-            upiId: upiId || '',
+            accountHolderName: (accountHolderName && String(accountHolderName).trim())
+                ? String(accountHolderName).trim()
+                : (existingUserBank.accountHolderName || existingStaffBank.accountHolderName || user.fullName),
+            accountNumber: (accountNumber !== undefined && accountNumber !== null && String(accountNumber).trim() !== '')
+                ? String(accountNumber).trim()
+                : (existingUserBank.accountNumber || existingStaffBank.accountNumber || ''),
+            ifscCode: (ifscCode !== undefined && ifscCode !== null && String(ifscCode).trim() !== '')
+                ? String(ifscCode).trim().toUpperCase()
+                : (existingUserBank.ifscCode || existingStaffBank.ifscCode || ''),
+            bankName: (bankName !== undefined && bankName !== null && String(bankName).trim() !== '')
+                ? String(bankName).trim()
+                : (existingUserBank.bankName || existingStaffBank.bankName || 'Bank'),
+            upiId: (upiId !== undefined && upiId !== null && String(upiId).trim() !== '')
+                ? String(upiId).trim()
+                : (existingUserBank.upiId || existingStaffBank.upiId || ''),
         };
         user.bankAccount = updatedAccount;
         await user.save();
         if (user.role === 'staff') {
             await StaffProfile_1.StaffProfile.findOneAndUpdate({ userId: user._id }, { bankAccount: updatedAccount }, { new: true });
         }
-        res.json({ success: true, bankAccount: user.bankAccount, message: "Bank details saved successfully" });
+        res.json({
+            success: true,
+            bankAccount: user.bankAccount,
+            message: "Bank and UPI details updated successfully",
+        });
     }
     catch (err) {
         res.status(500).json({ success: false, message: String(err) });

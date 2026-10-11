@@ -939,13 +939,13 @@ export const getBankAccounts = async (req: AuthRequest, res: Response): Promise<
           { 'bankAccount.accountNumber': { $exists: true, $ne: '' } },
           { 'bankAccount.upiId': { $exists: true, $ne: '' } },
         ],
-      }).select('fullName phone email role walletBalance isBlocked bankAccount'),
+      }).select('fullName phone email role walletBalance isBlocked bankAccount updatedAt'),
     ]);
 
     const accounts: any[] = [];
     const seenUserIds = new Set<string>();
 
-    // Staff accounts from StaffProfile
+    // 1. Process Staff profiles (merging StaffProfile.bankAccount + User.bankAccount)
     for (const sp of staffProfiles) {
       const u = sp.userId as any;
       if (!u) continue;
@@ -953,10 +953,13 @@ export const getBankAccounts = async (req: AuthRequest, res: Response): Promise<
       seenUserIds.add(uidStr);
 
       const bankName = sp.bankAccount?.bankName || u.bankAccount?.bankName || 'Bank';
-      const accountHolderName = sp.bankAccount?.accountHolderName || u.bankAccount?.accountHolderName || u.fullName;
+      const accountHolderName = sp.bankAccount?.accountHolderName || u.bankAccount?.accountHolderName || u.fullName || 'User';
       const accountNumber = sp.bankAccount?.accountNumber || u.bankAccount?.accountNumber || '';
       const ifscCode = sp.bankAccount?.ifscCode || u.bankAccount?.ifscCode || '';
       const upiId = (sp.bankAccount as any)?.upiId || u.bankAccount?.upiId || '';
+
+      const hasBank = Boolean(accountNumber && accountNumber.trim() !== '');
+      const hasUpi = Boolean(upiId && upiId.trim() !== '');
 
       const bankAccObj = {
         bankName,
@@ -970,9 +973,9 @@ export const getBankAccounts = async (req: AuthRequest, res: Response): Promise<
         _id: sp._id,
         id: sp._id,
         userId: u._id,
-        fullName: u.fullName,
-        phone: u.phone,
-        email: u.email,
+        fullName: u.fullName || 'Staff Member',
+        phone: u.phone || '',
+        email: u.email || '',
         role: 'staff',
         walletBalance: u.walletBalance ?? 0,
         isBlocked: Boolean(u.isBlocked),
@@ -981,12 +984,15 @@ export const getBankAccounts = async (req: AuthRequest, res: Response): Promise<
         accountNumber,
         ifscCode,
         upiId,
+        hasBank,
+        hasUpi,
+        isFullyLinked: hasBank && hasUpi,
         bankAccount: bankAccObj,
-        updatedAt: (sp as any).updatedAt || new Date(),
+        updatedAt: (sp as any).updatedAt || u.updatedAt || new Date(),
       });
     }
 
-    // All Users (Customer or Staff) who have bankAccount in User document
+    // 2. Process All Users (Customers or any Staff whose bankAccount was saved on User)
     for (const u of allUsers) {
       const uidStr = u._id.toString();
       if (seenUserIds.has(uidStr)) continue;
@@ -994,10 +1000,13 @@ export const getBankAccounts = async (req: AuthRequest, res: Response): Promise<
 
       const b = u.bankAccount || {};
       const bankName = b.bankName || 'Bank';
-      const accountHolderName = b.accountHolderName || u.fullName;
+      const accountHolderName = b.accountHolderName || u.fullName || 'User';
       const accountNumber = b.accountNumber || '';
       const ifscCode = b.ifscCode || '';
       const upiId = b.upiId || '';
+
+      const hasBank = Boolean(accountNumber && accountNumber.trim() !== '');
+      const hasUpi = Boolean(upiId && upiId.trim() !== '');
 
       const bankAccObj = {
         bankName,
@@ -1011,10 +1020,10 @@ export const getBankAccounts = async (req: AuthRequest, res: Response): Promise<
         _id: u._id,
         id: u._id,
         userId: u._id,
-        fullName: u.fullName,
-        phone: u.phone,
-        email: u.email,
-        role: u.role,
+        fullName: u.fullName || 'User',
+        phone: u.phone || '',
+        email: u.email || '',
+        role: u.role || 'customer',
         walletBalance: u.walletBalance ?? 0,
         isBlocked: Boolean(u.isBlocked),
         bankName,
@@ -1022,20 +1031,30 @@ export const getBankAccounts = async (req: AuthRequest, res: Response): Promise<
         accountNumber,
         ifscCode,
         upiId,
+        hasBank,
+        hasUpi,
+        isFullyLinked: hasBank && hasUpi,
         bankAccount: bankAccObj,
         updatedAt: (u as any).updatedAt || new Date(),
       });
     }
 
-    res.json({ success: true, count: accounts.length, accounts });
+    // Sort by latest updated first so newly added/updated bank & UPI accounts appear at top
+    accounts.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+    res.json({
+      success: true,
+      total: accounts.length,
+      accounts,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ══════════════════════════════════════════════════════════════════════
+// ----------------------------------------------------
 // 10. NOTIFICATION CENTER (PUSH & IN-APP)
-// ══════════════════════════════════════════════════════════════════════
+// ----------------------------------------------------
 
 // POST /api/v1/admin/notifications/send
 export const sendNotification = async (req: AuthRequest, res: Response): Promise<void> => {
