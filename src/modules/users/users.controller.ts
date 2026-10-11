@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { AuthRequest } from "../../middleware/auth";
 import { User } from "../../models/User";
+import { StaffProfile } from "../../models/StaffProfile";
 import { imagekit } from "../../config/imagekit";
 
 // GET /api/v1/users/me
@@ -106,6 +107,58 @@ export const getMyLocation = async (req: AuthRequest, res: Response): Promise<vo
       lng: user.lastKnownLng ?? null,
       updatedAt: user.lastLocationUpdateAt ?? null,
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: String(err) });
+  }
+};
+
+// GET /api/v1/users/me/bank-account
+export const getMyBankAccount = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const user = await User.findById(req.user!.id).select("bankAccount role fullName");
+    if (!user) { res.status(404).json({ success: false, message: "User not found" }); return; }
+
+    let bankAccount = user.bankAccount;
+    if (user.role === 'staff') {
+      const sp = await StaffProfile.findOne({ userId: user._id });
+      if (sp?.bankAccount && (sp.bankAccount.accountNumber || sp.bankAccount.upiId)) {
+        bankAccount = sp.bankAccount as any;
+      }
+    }
+
+    res.json({ success: true, bankAccount: bankAccount || {} });
+  } catch (err) {
+    res.status(500).json({ success: false, message: String(err) });
+  }
+};
+
+// PUT /api/v1/users/me/bank-account
+export const updateMyBankAccount = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { accountHolderName, accountNumber, ifscCode, bankName, upiId } = req.body;
+    const user = await User.findById(req.user!.id);
+    if (!user) { res.status(404).json({ success: false, message: "User not found" }); return; }
+
+    const updatedAccount = {
+      accountHolderName: accountHolderName || user.fullName,
+      accountNumber: accountNumber || '',
+      ifscCode: ifscCode || '',
+      bankName: bankName || 'Bank',
+      upiId: upiId || '',
+    };
+
+    user.bankAccount = updatedAccount;
+    await user.save();
+
+    if (user.role === 'staff') {
+      await StaffProfile.findOneAndUpdate(
+        { userId: user._id },
+        { bankAccount: updatedAccount },
+        { new: true }
+      );
+    }
+
+    res.json({ success: true, bankAccount: user.bankAccount, message: "Bank details saved successfully" });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
   }

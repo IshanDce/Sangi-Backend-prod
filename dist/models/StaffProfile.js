@@ -71,6 +71,7 @@ const StaffProfileSchema = new mongoose_1.Schema({
         accountNumber: String,
         ifscCode: String,
         bankName: String,
+        upiId: String,
     },
     portfolio: [{
             url: { type: String, required: true },

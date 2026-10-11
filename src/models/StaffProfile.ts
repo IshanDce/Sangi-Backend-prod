@@ -37,6 +37,7 @@ export interface IStaffProfile extends Document {
     accountNumber?: string;
     ifscCode?: string;
     bankName?: string;
+    upiId?: string;
   };
   portfolio: { url: string; caption?: string; uploadedAt: Date }[];
   // Live location — only set when staff app pushes real GPS.
@@ -78,6 +79,7 @@ const StaffProfileSchema = new Schema<IStaffProfile>(
       accountNumber: String,
       ifscCode: String,
       bankName: String,
+      upiId: String,
     },
     portfolio: [{
       url: { type: String, required: true },

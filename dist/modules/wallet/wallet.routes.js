@@ -7,8 +7,8 @@ const router = (0, express_1.Router)();
 router.use(auth_1.protect);
 router.get("/balance", wallet_controller_1.getBalance);
 router.get("/transactions", wallet_controller_1.getTransactions);
-router.post("/topup-order", (0, auth_1.requireRole)("customer"), wallet_controller_1.createTopupOrder);
-router.post("/topup-confirm", (0, auth_1.requireRole)("customer"), wallet_controller_1.confirmTopup);
-router.post("/withdraw", (0, auth_1.requireRole)("staff"), wallet_controller_1.withdraw);
+router.post("/topup-order", wallet_controller_1.createTopupOrder);
+router.post("/topup-confirm", wallet_controller_1.confirmTopup);
+router.post("/withdraw", wallet_controller_1.withdraw);
 exports.default = router;
 //# sourceMappingURL=wallet.routes.js.map

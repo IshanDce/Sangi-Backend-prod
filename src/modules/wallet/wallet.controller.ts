@@ -54,22 +54,23 @@ export const getTransactions = async (req: AuthRequest, res: Response): Promise<
 export const createTopupOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { amount } = req.body;
-    if (!amount || amount < 10) { res.status(400).json({ success: false, message: "Minimum top-up is ₹10" }); return; }
-
-    let order: { id: string };
-    try {
-      order = await razorpay.orders.create({
-        amount: amount * 100,
-        currency: "INR",
-        receipt: `topup_${req.user!.id}_${Date.now()}`,
-      });
-    } catch (rzpErr) {
-      console.warn("[Razorpay] Order creation fallback to mock order ID:", String(rzpErr));
-      order = { id: `order_mock_${Date.now()}` };
+    const numericAmount = Number(amount);
+    if (!numericAmount || isNaN(numericAmount) || numericAmount < 10) {
+      res.status(400).json({ success: false, message: "Minimum top-up is ₹10" });
+      return;
     }
-    res.json({ success: true, razorpayOrderId: order.id, amount });
-  } catch (err) {
-    res.status(500).json({ success: false, message: String(err) });
+
+    const order = await razorpay.orders.create({
+      amount: Math.round(numericAmount * 100),
+      currency: "INR",
+      receipt: `topup_${req.user!.id.slice(-6)}_${Date.now()}`,
+    });
+
+    console.log(`[Razorpay] Created live order ${order.id} for ₹${numericAmount}`);
+    res.json({ success: true, razorpayOrderId: order.id, amount: numericAmount });
+  } catch (err: any) {
+    console.error("[Razorpay] Topup order creation failed:", err);
+    res.status(500).json({ success: false, message: err?.message || String(err) });
   }
 };
 
@@ -103,10 +104,10 @@ export const confirmTopup = async (req: AuthRequest, res: Response): Promise<voi
   }
 };
 
-// POST /api/v1/wallet/withdraw  (Staff only)
+// POST /api/v1/wallet/withdraw  (Customer & Staff)
 export const withdraw = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { amount } = req.body;
+    const { amount, accountDetails: passedDetails, payoutMethod: passedMethod } = req.body;
     const numericAmount = Number(amount);
     if (!numericAmount || isNaN(numericAmount) || numericAmount <= 0) {
       res.status(400).json({ success: false, message: "Please enter a valid withdrawal amount" });
@@ -126,25 +127,37 @@ export const withdraw = async (req: AuthRequest, res: Response): Promise<void> =
     }
 
     // Capture account snapshot
-    let accountDetails: any = {};
-    if (user.role === 'staff') {
-      const sp = await StaffProfile.findOne({ userId: user._id });
-      if (sp?.bankAccount) {
-        accountDetails = {
-          bankName: sp.bankAccount.bankName,
-          accountHolderName: sp.bankAccount.accountHolderName || user.fullName,
-          accountNumber: sp.bankAccount.accountNumber,
-          ifscCode: sp.bankAccount.ifscCode,
-        };
+    let accountDetails: any = passedDetails || {};
+    let payoutMethod = passedMethod || (accountDetails?.upiId ? 'upi' : 'bank');
+
+    if (!accountDetails || (!accountDetails.accountNumber && !accountDetails.upiId)) {
+      if (user.role === 'staff') {
+        const sp = await StaffProfile.findOne({ userId: user._id });
+        if (sp?.bankAccount) {
+          accountDetails = {
+            bankName: sp.bankAccount.bankName,
+            accountHolderName: sp.bankAccount.accountHolderName || user.fullName,
+            accountNumber: sp.bankAccount.accountNumber,
+            ifscCode: sp.bankAccount.ifscCode,
+            upiId: (sp.bankAccount as any)?.upiId,
+          };
+          if ((sp.bankAccount as any)?.upiId && !accountDetails.accountNumber) {
+            payoutMethod = 'upi';
+          }
+        }
       }
-    } else if (user.bankAccount) {
-      accountDetails = {
-        bankName: user.bankAccount.bankName,
-        accountHolderName: user.bankAccount.accountHolderName || user.fullName,
-        accountNumber: user.bankAccount.accountNumber,
-        ifscCode: user.bankAccount.ifscCode,
-        upiId: user.bankAccount.upiId,
-      };
+      if (!accountDetails.accountNumber && !accountDetails.upiId && user.bankAccount) {
+        accountDetails = {
+          bankName: user.bankAccount.bankName,
+          accountHolderName: user.bankAccount.accountHolderName || user.fullName,
+          accountNumber: user.bankAccount.accountNumber,
+          ifscCode: user.bankAccount.ifscCode,
+          upiId: user.bankAccount.upiId,
+        };
+        if (user.bankAccount.upiId && !accountDetails.accountNumber) {
+          payoutMethod = 'upi';
+        }
+      }
     }
 
     const updatedUser = await User.findByIdAndUpdate(
@@ -157,7 +170,7 @@ export const withdraw = async (req: AuthRequest, res: Response): Promise<void> =
       userId: user._id,
       userRole: user.role,
       amount: numericAmount,
-      payoutMethod: accountDetails.upiId ? 'upi' : 'bank',
+      payoutMethod: payoutMethod || (accountDetails?.upiId ? 'upi' : 'bank'),
       accountDetails,
       status: 'pending',
     })) as unknown as IWithdrawalRequest;
@@ -176,14 +189,14 @@ export const withdraw = async (req: AuthRequest, res: Response): Promise<void> =
     await sendPushNotification({
       userId: req.user!.id,
       fcmToken: user.fcmToken,
-      title: "Withdrawal Request Received 🏦",
+      title: "Withdrawal Request Received ⏳",
       body: `₹${numericAmount} withdrawal request submitted. Will be processed within 24 hours.`,
       type: "withdrawal_pending",
     });
 
     res.json({
       success: true,
-      message: `₹${numericAmount} withdrawal initiated and submitted for processing.`,
+      message: `₹${numericAmount} withdrawal request submitted. Will be processed within 24 hours.`,
       withdrawalNumber: withdrawalDoc.withdrawalNumber,
       newBalance: updatedUser?.walletBalance ?? 0,
     });

@@ -290,8 +290,15 @@ exports.updateMyAvailability = updateMyAvailability;
 // ─── PUT /api/v1/staff/me/bank-account
 const updateBankAccount = async (req, res) => {
     try {
-        const { accountHolderName, accountNumber, ifscCode, bankName } = req.body;
-        const profile = await StaffProfile_1.StaffProfile.findOneAndUpdate({ userId: req.user.id }, { bankAccount: { accountHolderName, accountNumber, ifscCode, bankName } }, { new: true });
+        const { accountHolderName, accountNumber, ifscCode, bankName, upiId } = req.body;
+        const bankDetails = {
+            accountHolderName,
+            accountNumber: accountNumber || '',
+            ifscCode: ifscCode || '',
+            bankName: bankName || 'Bank',
+            upiId: upiId || '',
+        };
+        const profile = await StaffProfile_1.StaffProfile.findOneAndUpdate({ userId: req.user.id }, { bankAccount: bankDetails }, { new: true });
         res.json({ success: true, profile });
     }
     catch (err) {

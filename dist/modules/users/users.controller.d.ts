@@ -6,3 +6,5 @@ export declare const updatePhoto: (req: AuthRequest, res: Response) => Promise<v
 export declare const updateFcmToken: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const updateMyLocation: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const getMyLocation: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getMyBankAccount: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const updateMyBankAccount: (req: AuthRequest, res: Response) => Promise<void>;

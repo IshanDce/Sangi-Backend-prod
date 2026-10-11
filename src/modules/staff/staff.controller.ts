@@ -301,10 +301,17 @@ export const updateMyAvailability = async (req: AuthRequest, res: Response): Pro
 // ─── PUT /api/v1/staff/me/bank-account
 export const updateBankAccount = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { accountHolderName, accountNumber, ifscCode, bankName } = req.body;
+    const { accountHolderName, accountNumber, ifscCode, bankName, upiId } = req.body;
+    const bankDetails = {
+      accountHolderName,
+      accountNumber: accountNumber || '',
+      ifscCode: ifscCode || '',
+      bankName: bankName || 'Bank',
+      upiId: upiId || '',
+    };
     const profile = await StaffProfile.findOneAndUpdate(
       { userId: req.user!.id },
-      { bankAccount: { accountHolderName, accountNumber, ifscCode, bankName } },
+      { bankAccount: bankDetails },
       { new: true }
     );
     res.json({ success: true, profile });

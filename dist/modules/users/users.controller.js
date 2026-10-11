@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMyLocation = exports.updateMyLocation = exports.updateFcmToken = exports.updatePhoto = exports.updateMe = exports.getMe = void 0;
+exports.updateMyBankAccount = exports.getMyBankAccount = exports.getMyLocation = exports.updateMyLocation = exports.updateFcmToken = exports.updatePhoto = exports.updateMe = exports.getMe = void 0;
 const User_1 = require("../../models/User");
+const StaffProfile_1 = require("../../models/StaffProfile");
 const imagekit_1 = require("../../config/imagekit");
 // GET /api/v1/users/me
 const getMe = async (req, res) => {
@@ -114,4 +115,54 @@ const getMyLocation = async (req, res) => {
     }
 };
 exports.getMyLocation = getMyLocation;
+// GET /api/v1/users/me/bank-account
+const getMyBankAccount = async (req, res) => {
+    try {
+        const user = await User_1.User.findById(req.user.id).select("bankAccount role fullName");
+        if (!user) {
+            res.status(404).json({ success: false, message: "User not found" });
+            return;
+        }
+        let bankAccount = user.bankAccount;
+        if (user.role === 'staff') {
+            const sp = await StaffProfile_1.StaffProfile.findOne({ userId: user._id });
+            if (sp?.bankAccount && (sp.bankAccount.accountNumber || sp.bankAccount.upiId)) {
+                bankAccount = sp.bankAccount;
+            }
+        }
+        res.json({ success: true, bankAccount: bankAccount || {} });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+    }
+};
+exports.getMyBankAccount = getMyBankAccount;
+// PUT /api/v1/users/me/bank-account
+const updateMyBankAccount = async (req, res) => {
+    try {
+        const { accountHolderName, accountNumber, ifscCode, bankName, upiId } = req.body;
+        const user = await User_1.User.findById(req.user.id);
+        if (!user) {
+            res.status(404).json({ success: false, message: "User not found" });
+            return;
+        }
+        const updatedAccount = {
+            accountHolderName: accountHolderName || user.fullName,
+            accountNumber: accountNumber || '',
+            ifscCode: ifscCode || '',
+            bankName: bankName || 'Bank',
+            upiId: upiId || '',
+        };
+        user.bankAccount = updatedAccount;
+        await user.save();
+        if (user.role === 'staff') {
+            await StaffProfile_1.StaffProfile.findOneAndUpdate({ userId: user._id }, { bankAccount: updatedAccount }, { new: true });
+        }
+        res.json({ success: true, bankAccount: user.bankAccount, message: "Bank details saved successfully" });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: String(err) });
+    }
+};
+exports.updateMyBankAccount = updateMyBankAccount;
 //# sourceMappingURL=users.controller.js.map

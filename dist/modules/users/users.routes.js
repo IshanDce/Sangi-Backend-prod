@@ -12,5 +12,7 @@ router.put("/me/photo", upload_1.upload.single("photo"), users_controller_1.upda
 router.put("/me/fcm-token", users_controller_1.updateFcmToken);
 router.put("/me/location", users_controller_1.updateMyLocation);
 router.get("/me/location", users_controller_1.getMyLocation);
+router.get("/me/bank-account", users_controller_1.getMyBankAccount);
+router.put("/me/bank-account", users_controller_1.updateMyBankAccount);
 exports.default = router;
 //# sourceMappingURL=users.routes.js.map

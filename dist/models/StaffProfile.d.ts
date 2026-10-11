@@ -58,6 +58,7 @@ export interface IStaffProfile extends Document {
         accountNumber?: string;
         ifscCode?: string;
         bankName?: string;
+        upiId?: string;
     };
     portfolio: {
         url: string;
