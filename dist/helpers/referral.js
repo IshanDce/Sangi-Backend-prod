@@ -8,14 +8,15 @@ const User_1 = require("../models/User");
 const Referral_1 = require("../models/Referral");
 const Transaction_1 = require("../models/Transaction");
 const Notification_1 = require("../models/Notification");
+const fcm_1 = require("../utils/fcm");
 const mongoose_1 = __importDefault(require("mongoose"));
-const REFERRAL_REWARD = 50; // ₹50
+const REFERRAL_REWARD = 15; // ₹15 for both staff and customer
 /**
  * Process a referral code after a new user registers.
  * - Validates the code
- * - Credits ₹50 to the referrer's wallet
+ * - Credits ₹15 to the referrer's wallet
  * - Creates Transaction + Referral records
- * - Sends notification to referrer
+ * - Sends in-app and push notification to referrer
  */
 async function processReferral(newUserId, referralCode, newUserPhone) {
     try {
@@ -49,11 +50,11 @@ async function processReferral(newUserId, referralCode, newUserPhone) {
         if (monthlyCount >= 50) {
             return { success: false, message: "Referrer has reached monthly referral limit" };
         }
-        // Credit referrer wallet
+        // Credit referrer wallet with ₹15
         await User_1.User.updateOne({ _id: referrer._id }, { $inc: { walletBalance: REFERRAL_REWARD, referralCount: 1 } });
         // Set referredBy on new user
         await User_1.User.updateOne({ _id: newUserId }, { referredBy: referrer._id });
-        // Create transaction
+        // Create transaction record
         await Transaction_1.Transaction.create({
             userId: referrer._id,
             title: "Referral Reward",
@@ -72,14 +73,25 @@ async function processReferral(newUserId, referralCode, newUserPhone) {
             status: "completed",
             creditedAt: new Date(),
         });
-        // Send notification to referrer
+        // Send in-app notification to referrer
         const newUser = await User_1.User.findById(newUserId).select("fullName");
+        const joinedName = newUser?.fullName ?? "Someone";
         await Notification_1.Notification.create({
             userId: referrer._id,
             title: "Referral Reward! 🎉",
-            message: `₹${REFERRAL_REWARD} credited! ${newUser?.fullName ?? "Someone"} joined SANGI using your referral code.`,
+            message: `₹${REFERRAL_REWARD} credited! ${joinedName} joined SANGI using your referral code.`,
             type: "referral",
         });
+        // Send push notification to referrer's phone if FCM token exists
+        if (referrer.fcmToken) {
+            await (0, fcm_1.sendPushNotification)({
+                userId: String(referrer._id),
+                fcmToken: referrer.fcmToken,
+                title: "Referral Reward! 🎉",
+                body: `₹${REFERRAL_REWARD} credited to your wallet! ${joinedName} joined using your code.`,
+                type: "referral",
+            });
+        }
         return { success: true, message: "Referral reward credited" };
     }
     catch (err) {
