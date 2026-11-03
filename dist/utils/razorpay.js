@@ -18,28 +18,39 @@ exports.isMockMode = isMockMode;
 const isMockOrderId = (orderId) => typeof orderId === 'string' && orderId.startsWith('order_mock_');
 exports.isMockOrderId = isMockOrderId;
 const verifyRazorpaySignature = (orderId, paymentId, signature) => {
+    const cleanOrderId = orderId ? String(orderId).trim() : '';
+    const cleanPaymentId = paymentId ? String(paymentId).trim() : '';
+    const cleanSignature = signature ? String(signature).trim() : '';
     // Mock orders & mock payments bypass signature verification
     if ((0, exports.isMockMode)() ||
-        (orderId && (0, exports.isMockOrderId)(orderId)) ||
-        (paymentId && typeof paymentId === 'string' && paymentId.startsWith('pay_mock_')) ||
-        signature === 'sig_mock') {
+        (0, exports.isMockOrderId)(cleanOrderId) ||
+        cleanPaymentId.startsWith('pay_mock_') ||
+        cleanSignature === 'sig_mock') {
         console.log('[Razorpay] Mock payment detected — skipping signature verification');
         return true;
     }
-    if (!orderId || !paymentId || !signature) {
+    if (!cleanOrderId || !cleanPaymentId || !cleanSignature) {
+        console.warn(`[Razorpay Signature Warning] Missing parameter: orderId="${cleanOrderId}", paymentId="${cleanPaymentId}", signature="${cleanSignature ? 'present' : 'missing'}"`);
         return false;
     }
-    const secret = process.env.RAZORPAY_KEY_SECRET || '';
+    const secret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
     if (!secret || secret === 'your_razorpay_key_secret') {
         console.warn('[Razorpay] RAZORPAY_KEY_SECRET is default/dummy — bypassing signature');
         return true;
     }
-    const body = `${orderId}|${paymentId}`;
+    const body = `${cleanOrderId}|${cleanPaymentId}`;
     const expected = crypto_1.default
         .createHmac('sha256', secret)
         .update(body)
         .digest('hex');
-    return expected === signature;
+    const match = expected === cleanSignature;
+    if (!match) {
+        console.warn(`[Razorpay Signature Mismatch]`);
+        console.warn(`  Body string: "${body}"`);
+        console.warn(`  Expected HMAC: ${expected}`);
+        console.warn(`  Received sig:  ${cleanSignature}`);
+    }
+    return match;
 };
 exports.verifyRazorpaySignature = verifyRazorpaySignature;
 //# sourceMappingURL=razorpay.js.map

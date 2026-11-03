@@ -101,18 +101,25 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
       }
     }
 
-    const booking = await Booking.create({
-      customerId: req.user!.id,
-      staffId,
-      service,
-      date: new Date(date),
-      timeSlot: normalizeTimeSlot(timeSlot) || timeSlot,
-      location,
-      coordinates: lat && lng ? { lat, lng } : undefined,
-      notes,
-      status: "pendingPayment",
-      bookingFee: dynamicBookingFee,
-    });
+    let booking: any;
+    if (req.body.bookingId) {
+      booking = await Booking.findById(req.body.bookingId);
+    }
+
+    if (!booking) {
+      booking = await Booking.create({
+        customerId: req.user!.id,
+        staffId,
+        service,
+        date: new Date(date),
+        timeSlot: normalizeTimeSlot(timeSlot) || timeSlot,
+        location,
+        coordinates: lat && lng ? { lat, lng } : undefined,
+        notes,
+        status: "pendingPayment",
+        bookingFee: dynamicBookingFee,
+      });
+    }
 
     let order: { id: string };
     try {
@@ -130,12 +137,18 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
       order = { id: `order_mock_${booking._id}_${Date.now()}` };
     }
 
+    // Persist razorpayOrderId on the booking so backend always has it for verification
+    booking.bookingFeePayment = {
+      razorpayOrderId: order.id,
+    };
+    await booking.save();
+
     res.status(201).json({
       success: true,
       bookingId: booking._id,
       bookingNumber: booking.bookingNumber,
       razorpayOrderId: order.id,
-      amount: BOOKING_FEE,
+      amount: dynamicBookingFee,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
@@ -146,20 +159,35 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<void
 // Verify Razorpay booking fee payment -> status: requested -> FCM to staff
 export const confirmBookingPayment = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { bookingId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+    const { bookingId, razorpayPaymentId, razorpaySignature } = req.body;
+    let { razorpayOrderId } = req.body;
+
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      res.status(404).json({ success: false, message: "Booking not found" });
+      return;
+    }
+
+    // Resilient fallback: If client omitted razorpayOrderId, retrieve it from the booking!
+    if (!razorpayOrderId && booking.bookingFeePayment?.razorpayOrderId) {
+      razorpayOrderId = booking.bookingFeePayment.razorpayOrderId;
+    }
+
+    console.log(`[Confirm Booking] Validating signature for booking ${bookingId}: order=${razorpayOrderId}, payment=${razorpayPaymentId}`);
 
     const isValid = verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
-    if (!isValid) { res.status(400).json({ success: false, message: "Invalid payment signature" }); return; }
+    if (!isValid) {
+      res.status(400).json({ success: false, message: "Invalid payment signature" });
+      return;
+    }
 
-    const booking = await Booking.findByIdAndUpdate(
-      bookingId,
-      {
-        status: "requested",
-        bookingFeePayment: { razorpayOrderId, razorpayPaymentId, paidAt: new Date() },
-      },
-      { new: true }
-    );
-    if (!booking) { res.status(404).json({ success: false, message: "Booking not found" }); return; }
+    booking.status = "requested";
+    booking.bookingFeePayment = {
+      razorpayOrderId: razorpayOrderId || booking.bookingFeePayment?.razorpayOrderId || "",
+      razorpayPaymentId,
+      paidAt: new Date(),
+    };
+    await booking.save();
 
     // Log transaction
     await Transaction.create({
@@ -522,7 +550,8 @@ export const completeService = async (req: AuthRequest, res: Response): Promise<
 // --- POST /api/v1/bookings/:bookingId/pay-service  (Customer pays staff fee)
 export const payServiceFee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { method, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+    const { method, razorpayPaymentId, razorpaySignature } = req.body;
+    let { razorpayOrderId } = req.body;
 
     // Validate booking is strictly pending payment and belongs to caller
     const booking = await Booking.findOne({
@@ -537,6 +566,11 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
         message: "Booking is not awaiting payment or has already been paid.",
       });
       return;
+    }
+
+    // Resilient fallback: retrieve saved orderId from booking if missing from request body
+    if (!razorpayOrderId && booking.serviceFeePayment?.razorpayOrderId) {
+      razorpayOrderId = booking.serviceFeePayment.razorpayOrderId;
     }
 
     const amount = booking.totalServiceAmount || ((booking.serviceCharge || 0) + (booking.additionalCharge || 0)) || 0;
@@ -738,6 +772,13 @@ export const createServicePaymentOrder = async (req: AuthRequest, res: Response)
       console.warn("[Razorpay] Order creation fallback to mock order ID:", String(rzpErr));
       order = { id: `order_mock_${booking._id}_${Date.now()}` };
     }
+
+    // Persist razorpayOrderId on the booking
+    booking.serviceFeePayment = {
+      razorpayOrderId: order.id,
+    } as any;
+    await booking.save();
+
     res.json({ success: true, razorpayOrderId: order.id, amount });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
