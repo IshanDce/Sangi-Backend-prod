@@ -30,6 +30,16 @@ const sendOtp = async (req, res) => {
                 });
                 return;
             }
+            if (user.isBlocked) {
+                res.status(403).json({
+                    success: false,
+                    isBlocked: true,
+                    message: user.blockReason
+                        ? `Your account has been blocked: ${user.blockReason}`
+                        : "Your account has been blocked by administrator.",
+                });
+                return;
+            }
             if (role && user.role !== role) {
                 const isStaff = user.role === "staff";
                 res.status(403).json({
@@ -82,6 +92,16 @@ const verifyOtp = async (req, res) => {
             res.status(404).json({ success: false, message: "User not found. Please register first." });
             return;
         }
+        if (user.isBlocked) {
+            res.status(403).json({
+                success: false,
+                isBlocked: true,
+                message: user.blockReason
+                    ? `Your account has been blocked: ${user.blockReason}`
+                    : "Your account has been blocked by administrator.",
+            });
+            return;
+        }
         if (role && user.role !== role) {
             const isStaff = user.role === "staff";
             res.status(403).json({
@@ -116,6 +136,16 @@ const login = async (req, res) => {
         const user = await User_1.User.findOne({ phone });
         if (!user || !(await user.comparePassword(password))) {
             res.status(401).json({ success: false, message: "Invalid phone or password" });
+            return;
+        }
+        if (user.isBlocked) {
+            res.status(403).json({
+                success: false,
+                isBlocked: true,
+                message: user.blockReason
+                    ? `Your account has been blocked: ${user.blockReason}`
+                    : "Your account has been blocked by administrator.",
+            });
             return;
         }
         if (role && user.role !== role) {

@@ -308,21 +308,33 @@ export const getBookingById = async (req: AuthRequest, res: Response): Promise<v
 // --- PUT /api/v1/bookings/:bookingId/accept
 export const acceptBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.bookingId,
+    // Only assigned staff or admin can accept, and only if status is strictly 'requested'
+    const query: Record<string, any> = { _id: req.params.bookingId, status: "requested" };
+    if (req.user?.role !== "admin") {
+      query.staffId = req.user!.id;
+    }
+
+    const booking = await Booking.findOneAndUpdate(
+      query,
       { status: "accepted" },
       { new: true }
     );
-    if (!booking) { res.status(404).json({ success: false, message: "Booking not found" }); return; }
+    if (!booking) {
+      res.status(400).json({
+        success: false,
+        message: "Booking cannot be accepted (it may have already been accepted, cancelled, or does not exist).",
+      });
+      return;
+    }
 
-    const staff = await User.findById(req.user!.id);
+    const staff = await User.findById(booking.staffId);
     const customer = await User.findById(booking.customerId);
 
     await sendPushNotification({
       userId: String(booking.customerId),
       fcmToken: customer?.fcmToken,
       title: "Booking Accepted",
-      body: `${staff?.fullName} accepted your ${booking.service} request`,
+      body: `${staff?.fullName || "Staff"} accepted your ${booking.service} request`,
       type: "bookingAccepted",
       metadata: { bookingId: String(booking._id) },
     });
@@ -336,21 +348,35 @@ export const acceptBooking = async (req: AuthRequest, res: Response): Promise<vo
 // --- PUT /api/v1/bookings/:bookingId/decline
 export const declineBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.bookingId,
+    // Only assigned staff or admin can decline, and ONLY if status is strictly 'requested'
+    const query: Record<string, any> = { _id: req.params.bookingId, status: "requested" };
+    if (req.user?.role !== "admin") {
+      query.staffId = req.user!.id;
+    }
+
+    const booking = await Booking.findOneAndUpdate(
+      query,
       { status: "declined" },
       { new: true }
     );
-    if (!booking) { res.status(404).json({ success: false, message: "Booking not found" }); return; }
+    if (!booking) {
+      res.status(400).json({
+        success: false,
+        message: "Booking cannot be declined (it may have already been processed, cancelled, or does not exist).",
+      });
+      return;
+    }
 
-    // Refund ₹30 to customer wallet
-    await User.findByIdAndUpdate(booking.customerId, { $inc: { walletBalance: BOOKING_FEE } });
+    const refundAmount = booking.bookingFee || BOOKING_FEE;
+
+    // Refund fee to customer wallet (guaranteed exactly once)
+    await User.findByIdAndUpdate(booking.customerId, { $inc: { walletBalance: refundAmount } });
     await Transaction.create({
       userId: booking.customerId,
       bookingId: booking._id,
       title: "Booking Fee Refunded",
       subtitle: `${booking.service} booking declined`,
-      amount: BOOKING_FEE,
+      amount: refundAmount,
       isCredit: true,
       type: "refund",
       status: "completed",
@@ -361,7 +387,7 @@ export const declineBooking = async (req: AuthRequest, res: Response): Promise<v
       userId: String(booking.customerId),
       fcmToken: customer?.fcmToken,
       title: "Booking Declined",
-      body: `Your booking was declined. ₹${BOOKING_FEE} refunded to wallet.`,
+      body: `Your booking was declined. ₹${refundAmount} refunded to your wallet.`,
       type: "bookingDeclined",
       metadata: { bookingId: String(booking._id) },
     });
@@ -375,13 +401,30 @@ export const declineBooking = async (req: AuthRequest, res: Response): Promise<v
 // --- PUT /api/v1/bookings/:bookingId/cancel
 export const cancelBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.bookingId,
+    // Only customer, assigned staff, or admin can cancel, and only while booking is not completed/ongoing
+    const query: Record<string, any> = {
+      _id: req.params.bookingId,
+      status: { $in: ["pendingPayment", "paymentSuccess", "requested", "accepted"] },
+    };
+    if (req.user?.role === "customer") {
+      query.customerId = req.user!.id;
+    } else if (req.user?.role === "staff") {
+      query.staffId = req.user!.id;
+    }
+
+    const booking = await Booking.findOneAndUpdate(
+      query,
       { status: "cancelled" },
       { new: true }
     );
-    if (!booking) { res.status(404).json({ success: false, message: "Booking not found" }); return; }
-    // TODO: apply cancellation policy (partial/full refund based on timing)
+    if (!booking) {
+      res.status(400).json({
+        success: false,
+        message: "Booking cannot be cancelled in its current state or you are not authorized.",
+      });
+      return;
+    }
+
     res.json({ success: true, booking });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
@@ -391,12 +434,24 @@ export const cancelBooking = async (req: AuthRequest, res: Response): Promise<vo
 // --- PUT /api/v1/bookings/:bookingId/start
 export const startService = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.bookingId,
+    // Only assigned staff or admin can start service, and only if currently 'accepted'
+    const query: Record<string, any> = { _id: req.params.bookingId, status: "accepted" };
+    if (req.user?.role !== "admin") {
+      query.staffId = req.user!.id;
+    }
+
+    const booking = await Booking.findOneAndUpdate(
+      query,
       { status: "ongoing" },
       { new: true }
     );
-    if (!booking) { res.status(404).json({ success: false, message: "Booking not found" }); return; }
+    if (!booking) {
+      res.status(400).json({
+        success: false,
+        message: "Service cannot be started (booking is not in accepted status).",
+      });
+      return;
+    }
 
     const customer = await User.findById(booking.customerId);
     await sendPushNotification({
@@ -418,14 +473,35 @@ export const startService = async (req: AuthRequest, res: Response): Promise<voi
 export const completeService = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { serviceCharge, additionalCharge } = req.body;
-    const total = (serviceCharge || 0) + (additionalCharge || 0);
+    const total = (Number(serviceCharge) || 0) + (Number(additionalCharge) || 0);
+    if (total <= 0) {
+      res.status(400).json({ success: false, message: "Please enter a valid service amount" });
+      return;
+    }
 
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.bookingId,
-      { status: "paymentPending", serviceCharge, additionalCharge, totalServiceAmount: total },
+    // Only assigned staff or admin can complete, and only if currently 'ongoing'
+    const query: Record<string, any> = { _id: req.params.bookingId, status: "ongoing" };
+    if (req.user?.role !== "admin") {
+      query.staffId = req.user!.id;
+    }
+
+    const booking = await Booking.findOneAndUpdate(
+      query,
+      {
+        status: "paymentPending",
+        serviceCharge: Number(serviceCharge) || 0,
+        additionalCharge: Number(additionalCharge) || 0,
+        totalServiceAmount: total,
+      },
       { new: true }
     );
-    if (!booking) { res.status(404).json({ success: false, message: "Booking not found" }); return; }
+    if (!booking) {
+      res.status(400).json({
+        success: false,
+        message: "Work cannot be marked complete (booking is not ongoing or already completed).",
+      });
+      return;
+    }
 
     const customer = await User.findById(booking.customerId);
     await sendPushNotification({
@@ -447,8 +523,21 @@ export const completeService = async (req: AuthRequest, res: Response): Promise<
 export const payServiceFee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { method, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
-    const booking = await Booking.findById(req.params.bookingId);
-    if (!booking) { res.status(404).json({ success: false, message: "Booking not found" }); return; }
+
+    // Validate booking is strictly pending payment and belongs to caller
+    const booking = await Booking.findOne({
+      _id: req.params.bookingId,
+      status: "paymentPending",
+      ...(req.user?.role !== "admin" ? { customerId: req.user!.id } : {}),
+    });
+
+    if (!booking) {
+      res.status(400).json({
+        success: false,
+        message: "Booking is not awaiting payment or has already been paid.",
+      });
+      return;
+    }
 
     const amount = booking.totalServiceAmount || ((booking.serviceCharge || 0) + (booking.additionalCharge || 0)) || 0;
     if (amount <= 0) {
@@ -459,28 +548,48 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
     const staffAmount = amount * 0.75;
 
     if (method === "wallet") {
-      const customer = await User.findById(req.user!.id);
-      if (!customer || customer.walletBalance < amount) {
+      // Atomic deduction: only deduct if balance >= amount
+      const customer = await User.findOneAndUpdate(
+        { _id: req.user!.id, walletBalance: { $gte: amount } },
+        { $inc: { walletBalance: -amount } },
+        { new: true }
+      );
+      if (!customer) {
         res.status(400).json({ success: false, message: "Insufficient wallet balance" });
         return;
       }
-      await User.findByIdAndUpdate(req.user!.id, { $inc: { walletBalance: -amount } });
     } else {
-      // Razorpay
+      // Razorpay payment verification
       const isValid = verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
-      if (!isValid) { res.status(400).json({ success: false, message: "Invalid payment signature" }); return; }
+      if (!isValid) {
+        res.status(400).json({ success: false, message: "Invalid payment signature" });
+        return;
+      }
     }
 
-    // Update booking
-    await Booking.findByIdAndUpdate(req.params.bookingId, {
-      status: "paymentCompleted",
-      serviceFeePayment: {
-        razorpayOrderId,
-        razorpayPaymentId,
-        paidAt: new Date(),
-        method,
+    // Atomic booking status transition: ensure status was still paymentPending
+    const updatedBooking = await Booking.findOneAndUpdate(
+      { _id: req.params.bookingId, status: "paymentPending" },
+      {
+        status: "paymentCompleted",
+        serviceFeePayment: {
+          razorpayOrderId,
+          razorpayPaymentId,
+          paidAt: new Date(),
+          method,
+        },
       },
-    });
+      { new: true }
+    );
+
+    if (!updatedBooking) {
+      // Rollback wallet if deducted
+      if (method === "wallet") {
+        await User.findByIdAndUpdate(req.user!.id, { $inc: { walletBalance: amount } });
+      }
+      res.status(400).json({ success: false, message: "Payment already recorded for this booking" });
+      return;
+    }
 
     // Credit staff wallet with 75%
     await User.findByIdAndUpdate(booking.staffId, { $inc: { walletBalance: staffAmount } });
@@ -532,7 +641,7 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
       metadata: { bookingId: String(booking._id), amount: staffAmount },
     });
 
-    res.json({ success: true, message: "Payment successful" });
+    res.json({ success: true, message: "Payment successful", booking: updatedBooking });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
   }

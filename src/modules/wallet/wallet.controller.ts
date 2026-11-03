@@ -121,7 +121,14 @@ export const withdraw = async (req: AuthRequest, res: Response): Promise<void> =
 
     const user = await User.findById(req.user!.id);
     if (!user) { res.status(404).json({ success: false, message: "User not found" }); return; }
-    if (user.walletBalance < numericAmount) {
+
+    // Atomic deduction: deduct only if balance >= numericAmount to eliminate race conditions
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: req.user!.id, walletBalance: { $gte: numericAmount } },
+      { $inc: { walletBalance: -numericAmount } },
+      { new: true }
+    );
+    if (!updatedUser) {
       res.status(400).json({ success: false, message: "Insufficient wallet balance" });
       return;
     }
@@ -160,20 +167,21 @@ export const withdraw = async (req: AuthRequest, res: Response): Promise<void> =
       }
     }
 
-    const updatedUser = await User.findByIdAndUpdate(
-      req.user!.id,
-      { $inc: { walletBalance: -numericAmount } },
-      { new: true }
-    );
-
-    const withdrawalDoc = (await WithdrawalRequest.create({
-      userId: user._id,
-      userRole: user.role,
-      amount: numericAmount,
-      payoutMethod: payoutMethod || (accountDetails?.upiId ? 'upi' : 'bank'),
-      accountDetails,
-      status: 'pending',
-    })) as unknown as IWithdrawalRequest;
+    let withdrawalDoc: IWithdrawalRequest;
+    try {
+      withdrawalDoc = (await WithdrawalRequest.create({
+        userId: user._id,
+        userRole: user.role,
+        amount: numericAmount,
+        payoutMethod: payoutMethod || (accountDetails?.upiId ? 'upi' : 'bank'),
+        accountDetails,
+        status: 'pending',
+      })) as unknown as IWithdrawalRequest;
+    } catch (createErr) {
+      // Rollback deducted balance if creation fails
+      await User.findByIdAndUpdate(req.user!.id, { $inc: { walletBalance: numericAmount } });
+      throw createErr;
+    }
 
     await Transaction.create({
       userId: req.user!.id,

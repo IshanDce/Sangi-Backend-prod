@@ -118,7 +118,9 @@ const withdraw = async (req, res) => {
             res.status(404).json({ success: false, message: "User not found" });
             return;
         }
-        if (user.walletBalance < numericAmount) {
+        // Atomic deduction: deduct only if balance >= numericAmount to eliminate race conditions
+        const updatedUser = await User_1.User.findOneAndUpdate({ _id: req.user.id, walletBalance: { $gte: numericAmount } }, { $inc: { walletBalance: -numericAmount } }, { new: true });
+        if (!updatedUser) {
             res.status(400).json({ success: false, message: "Insufficient wallet balance" });
             return;
         }
@@ -154,15 +156,22 @@ const withdraw = async (req, res) => {
                 }
             }
         }
-        const updatedUser = await User_1.User.findByIdAndUpdate(req.user.id, { $inc: { walletBalance: -numericAmount } }, { new: true });
-        const withdrawalDoc = (await WithdrawalRequest_1.WithdrawalRequest.create({
-            userId: user._id,
-            userRole: user.role,
-            amount: numericAmount,
-            payoutMethod: payoutMethod || (accountDetails?.upiId ? 'upi' : 'bank'),
-            accountDetails,
-            status: 'pending',
-        }));
+        let withdrawalDoc;
+        try {
+            withdrawalDoc = (await WithdrawalRequest_1.WithdrawalRequest.create({
+                userId: user._id,
+                userRole: user.role,
+                amount: numericAmount,
+                payoutMethod: payoutMethod || (accountDetails?.upiId ? 'upi' : 'bank'),
+                accountDetails,
+                status: 'pending',
+            }));
+        }
+        catch (createErr) {
+            // Rollback deducted balance if creation fails
+            await User_1.User.findByIdAndUpdate(req.user.id, { $inc: { walletBalance: numericAmount } });
+            throw createErr;
+        }
         await Transaction_1.Transaction.create({
             userId: req.user.id,
             title: "Withdrawal",

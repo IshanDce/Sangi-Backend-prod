@@ -1,4 +1,4 @@
-﻿import { Request, Response } from "express";
+import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { User } from "../../models/User";
@@ -27,6 +27,17 @@ export const sendOtp = async (req: Request, res: Response): Promise<void> => {
           success: false,
           errorCode: "USER_NOT_FOUND",
           message: "No account found with this phone number. Please register first.",
+        });
+        return;
+      }
+
+      if (user.isBlocked) {
+        res.status(403).json({
+          success: false,
+          isBlocked: true,
+          message: user.blockReason
+            ? `Your account has been blocked: ${user.blockReason}`
+            : "Your account has been blocked by administrator.",
         });
         return;
       }
@@ -88,6 +99,17 @@ export const verifyOtp = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    if (user.isBlocked) {
+      res.status(403).json({
+        success: false,
+        isBlocked: true,
+        message: user.blockReason
+          ? `Your account has been blocked: ${user.blockReason}`
+          : "Your account has been blocked by administrator.",
+      });
+      return;
+    }
+
     if (role && user.role !== role) {
       const isStaff = user.role === "staff";
       res.status(403).json({
@@ -123,6 +145,17 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const user = await User.findOne({ phone });
     if (!user || !(await user.comparePassword(password))) {
       res.status(401).json({ success: false, message: "Invalid phone or password" });
+      return;
+    }
+
+    if (user.isBlocked) {
+      res.status(403).json({
+        success: false,
+        isBlocked: true,
+        message: user.blockReason
+          ? `Your account has been blocked: ${user.blockReason}`
+          : "Your account has been blocked by administrator.",
+      });
       return;
     }
 

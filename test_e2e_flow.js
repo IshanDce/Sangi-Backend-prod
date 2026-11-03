@@ -407,7 +407,7 @@ async function runE2ETest() {
   });
   const staffWalletData = await staffWalletRes.json();
   console.log(`💰 Staff Wallet Balance: ₹${staffWalletData.balance} | Total Earnings: ₹${staffWalletData.totalEarnings}`);
-  assert(staffWalletData.balance === 500 && staffWalletData.totalEarnings === 500, 'Staff wallet credited ₹500 correctly!');
+  assert(staffWalletData.balance === 375 && staffWalletData.totalEarnings === 375, 'Staff wallet credited 75% (₹375) correctly after 25% platform commission!');
 
   // Staff Profile Rating Check
   const staffProfileRes = await fetch(`${BASE_URL}/staff/${staffId}/profile`, {

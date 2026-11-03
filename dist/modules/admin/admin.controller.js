@@ -745,23 +745,20 @@ const approveWithdrawal = async (req, res) => {
             res.status(400).json({ success: false, message: 'Bank UTR / Transaction Reference is required' });
             return;
         }
-        const request = await WithdrawalRequest_1.WithdrawalRequest.findById(req.params.id);
+        // Atomically claim and approve only if status is strictly 'pending'
+        const request = await WithdrawalRequest_1.WithdrawalRequest.findOneAndUpdate({ _id: req.params.id, status: 'pending' }, {
+            status: 'approved',
+            utrReference: String(utrReference).trim(),
+            adminNotes: adminNotes ? String(adminNotes).trim() : undefined,
+            processedAt: new Date(),
+            processedBy: new mongoose_1.default.Types.ObjectId(req.user.id),
+        }, { new: true });
         if (!request) {
-            res.status(404).json({ success: false, message: 'Withdrawal request not found' });
+            res.status(400).json({ success: false, message: 'Withdrawal request not found or has already been processed' });
             return;
         }
-        if (request.status !== 'pending') {
-            res.status(400).json({ success: false, message: `Request is already ${request.status.toUpperCase()}` });
-            return;
-        }
-        request.status = 'approved';
-        request.utrReference = String(utrReference).trim();
-        request.adminNotes = adminNotes ? String(adminNotes).trim() : undefined;
-        request.processedAt = new Date();
-        request.processedBy = new mongoose_1.default.Types.ObjectId(req.user.id);
-        await request.save();
-        // Mark corresponding transaction completed
-        await Transaction_1.Transaction.findOneAndUpdate({ userId: request.userId, type: 'withdrawal', status: 'pending' }, { status: 'completed', subtitle: `Transferred to bank. UTR: ${utrReference}` });
+        // Mark corresponding transaction completed (match by amount and pending status)
+        await Transaction_1.Transaction.findOneAndUpdate({ userId: request.userId, type: 'withdrawal', status: 'pending', amount: request.amount }, { status: 'completed', subtitle: `Transferred to bank. UTR: ${utrReference} (${request.withdrawalNumber})` });
         // Send push notification & notification document
         const user = await User_1.User.findById(request.userId);
         if (user) {
@@ -800,21 +797,18 @@ const rejectWithdrawal = async (req, res) => {
             res.status(400).json({ success: false, message: 'Rejection reason is required' });
             return;
         }
-        const request = await WithdrawalRequest_1.WithdrawalRequest.findById(req.params.id);
+        // Atomically claim and reject ONLY if status is strictly 'pending' to prevent double refunds
+        const request = await WithdrawalRequest_1.WithdrawalRequest.findOneAndUpdate({ _id: req.params.id, status: 'pending' }, {
+            status: 'rejected',
+            rejectionReason: String(rejectionReason).trim(),
+            processedAt: new Date(),
+            processedBy: new mongoose_1.default.Types.ObjectId(req.user.id),
+        }, { new: true });
         if (!request) {
-            res.status(404).json({ success: false, message: 'Withdrawal request not found' });
+            res.status(400).json({ success: false, message: 'Withdrawal request not found or has already been processed' });
             return;
         }
-        if (request.status !== 'pending') {
-            res.status(400).json({ success: false, message: `Request is already ${request.status.toUpperCase()}` });
-            return;
-        }
-        request.status = 'rejected';
-        request.rejectionReason = String(rejectionReason).trim();
-        request.processedAt = new Date();
-        request.processedBy = new mongoose_1.default.Types.ObjectId(req.user.id);
-        await request.save();
-        // REFUND amount back to user's wallet
+        // REFUND amount back to user's wallet (guaranteed exactly once)
         const updatedUser = await User_1.User.findByIdAndUpdate(request.userId, { $inc: { walletBalance: request.amount } }, { new: true });
         // Record refund transaction
         await Transaction_1.Transaction.create({
