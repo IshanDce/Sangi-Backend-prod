@@ -11,6 +11,10 @@ const referral_1 = require("../../helpers/referral");
 const Otp_1 = require("../../models/Otp");
 const otp_1 = require("../../utils/otp");
 const signToken = (id, role) => jsonwebtoken_1.default.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: (process.env.JWT_EXPIRES_IN || "7d") });
+// ─── Play Store Reviewer & Testing Bypass Configuration ───
+// These numbers bypass dynamic SMS generation and accept STATIC_TEST_OTP
+const PLAY_STORE_TEST_PHONES = new Set(["9876543210", "8888888888", "9999911111", "9999999999"]);
+const STATIC_TEST_OTP = "123456";
 // POST /api/v1/auth/send-otp
 const sendOtp = async (req, res) => {
     try {
@@ -66,11 +70,17 @@ const sendOtp = async (req, res) => {
             }
         }
         await Otp_1.Otp.deleteMany({ phone });
-        const otp = (0, otp_1.generateOtp)();
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min TTL
+        const isTestPhone = PLAY_STORE_TEST_PHONES.has(phone);
+        const otp = isTestPhone ? STATIC_TEST_OTP : (0, otp_1.generateOtp)();
+        const expiresAt = new Date(Date.now() + (isTestPhone ? 60 : 10) * 60 * 1000);
         await Otp_1.Otp.create({ phone, otp, purpose, expiresAt });
-        // Send OTP via Linerpay SMS (or console log in mock mode)
-        await (0, otp_1.sendOtpSms)(phone, otp);
+        // Send OTP via Linerpay SMS (or console log in mock mode; bypass for reviewers)
+        if (!isTestPhone) {
+            await (0, otp_1.sendOtpSms)(phone, otp);
+        }
+        else {
+            console.log(`[PLAY-STORE-BYPASS] Static OTP '${STATIC_TEST_OTP}' generated for test phone ${phone}`);
+        }
         res.json({ success: true, message: "OTP sent successfully" });
     }
     catch (err) {
@@ -82,7 +92,14 @@ exports.sendOtp = sendOtp;
 const verifyOtp = async (req, res) => {
     try {
         const { phone, otp, role } = req.body;
-        const record = await Otp_1.Otp.findOne({ phone, otp });
+        const isTestPhone = PLAY_STORE_TEST_PHONES.has(phone);
+        let record = null;
+        if (isTestPhone && otp === STATIC_TEST_OTP) {
+            record = { phone, otp };
+        }
+        else {
+            record = await Otp_1.Otp.findOne({ phone, otp });
+        }
         if (!record) {
             res.status(400).json({ success: false, message: "Invalid or expired OTP" });
             return;
@@ -203,7 +220,14 @@ const verifyForgotOtp = async (req, res) => {
             res.status(400).json({ success: false, message: "phone and otp required" });
             return;
         }
-        const record = await Otp_1.Otp.findOne({ phone, otp, purpose: "forgot_password" });
+        const isTestPhone = PLAY_STORE_TEST_PHONES.has(phone);
+        let record = null;
+        if (isTestPhone && otp === STATIC_TEST_OTP) {
+            record = { phone, otp, expiresAt: new Date(Date.now() + 60000) };
+        }
+        else {
+            record = await Otp_1.Otp.findOne({ phone, otp, purpose: "forgot_password" });
+        }
         if (!record) {
             res.status(400).json({ success: false, message: "Invalid or expired OTP" });
             return;
