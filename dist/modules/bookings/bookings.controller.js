@@ -13,6 +13,7 @@ const razorpay_2 = require("../../utils/razorpay");
 const fcm_1 = require("../../utils/fcm");
 const timeSlot_1 = require("../../utils/timeSlot");
 const BOOKING_FEE = 30;
+const COMMISSION_RATE = 0.10; // 10% SANGI platform commission (90% to staff)
 // Helper: check if phones should be revealed
 const isContactRevealed = (status) => ["accepted", "ongoing", "serviceCompleted", "paymentPending", "paymentCompleted", "completed"].includes(status);
 // --- POST /api/v1/bookings/create-order
@@ -518,8 +519,8 @@ const payServiceFee = async (req, res) => {
             res.status(400).json({ success: false, message: "Invalid service charge amount" });
             return;
         }
-        const commission = amount * 0.25;
-        const staffAmount = amount * 0.75;
+        const commission = Number((amount * COMMISSION_RATE).toFixed(2));
+        const staffAmount = Number((amount - commission).toFixed(2));
         if (method === "wallet") {
             // Atomic deduction: only deduct if balance >= amount
             const customer = await User_1.User.findOneAndUpdate({ _id: req.user.id, walletBalance: { $gte: amount } }, { $inc: { walletBalance: -amount } }, { new: true });
@@ -554,7 +555,7 @@ const payServiceFee = async (req, res) => {
             res.status(400).json({ success: false, message: "Payment already recorded for this booking" });
             return;
         }
-        // Credit staff wallet with 75%
+        // Credit staff wallet with 90%
         await User_1.User.findByIdAndUpdate(booking.staffId, { $inc: { walletBalance: staffAmount } });
         // Transactions (3 records)
         await Transaction_1.Transaction.create([
@@ -584,7 +585,7 @@ const payServiceFee = async (req, res) => {
                 userId: booking.staffId,
                 bookingId: booking._id,
                 title: "Platform Commission",
-                subtitle: `25% SANGI fee - ${booking.bookingNumber}`,
+                subtitle: `${Math.round(COMMISSION_RATE * 100)}% SANGI fee - ${booking.bookingNumber}`,
                 amount: commission,
                 isCredit: false,
                 type: "adjustment",

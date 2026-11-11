@@ -13,6 +13,7 @@ import { sendPushNotification } from "../../utils/fcm";
 import { parseSlotToMinutes, slotsOverlap, suggestAvailableSlots, SLOT_OCCUPYING_STATUSES, normalizeTimeSlot } from "../../utils/timeSlot";
 
 const BOOKING_FEE = 30;
+const COMMISSION_RATE = 0.10; // 10% SANGI platform commission (90% to staff)
 
 // Helper: check if phones should be revealed
 const isContactRevealed = (status: string) =>
@@ -578,8 +579,8 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
       res.status(400).json({ success: false, message: "Invalid service charge amount" });
       return;
     }
-    const commission = amount * 0.25;
-    const staffAmount = amount * 0.75;
+    const commission = Number((amount * COMMISSION_RATE).toFixed(2));
+    const staffAmount = Number((amount - commission).toFixed(2));
 
     if (method === "wallet") {
       // Atomic deduction: only deduct if balance >= amount
@@ -625,7 +626,7 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Credit staff wallet with 75%
+    // Credit staff wallet with 90%
     await User.findByIdAndUpdate(booking.staffId, { $inc: { walletBalance: staffAmount } });
 
     // Transactions (3 records)
@@ -656,7 +657,7 @@ export const payServiceFee = async (req: AuthRequest, res: Response): Promise<vo
         userId: booking.staffId,
         bookingId: booking._id,
         title: "Platform Commission",
-        subtitle: `25% SANGI fee - ${booking.bookingNumber}`,
+        subtitle: `${Math.round(COMMISSION_RATE * 100)}% SANGI fee - ${booking.bookingNumber}`,
         amount: commission,
         isCredit: false,
         type: "adjustment",
