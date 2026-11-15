@@ -347,18 +347,32 @@ export const updateBankAccount = async (req: AuthRequest, res: Response): Promis
 export const updateMyLocation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { lat, lng } = req.body;
-    if (lat === undefined || lng === undefined) {
+    if (lat === undefined || lng === undefined || lat === null || lng === null) {
       res.status(400).json({ success: false, message: "lat and lng are required" });
       return;
     }
-    await StaffProfile.findOneAndUpdate(
-      { userId: req.user!.id },
-      {
-        location: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] },
-        lastLocationUpdateAt: new Date(),
-      },
-      { new: true }
-    );
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    if (Number.isNaN(latNum) || Number.isNaN(lngNum)) {
+      res.status(400).json({ success: false, message: "lat and lng must be numeric" });
+      return;
+    }
+    const now = new Date();
+    await Promise.all([
+      StaffProfile.findOneAndUpdate(
+        { userId: req.user!.id },
+        {
+          location: { type: "Point", coordinates: [lngNum, latNum] },
+          lastLocationUpdateAt: now,
+        },
+        { new: true }
+      ),
+      User.findByIdAndUpdate(req.user!.id, {
+        lastKnownLat: latNum,
+        lastKnownLng: lngNum,
+        lastLocationUpdateAt: now,
+      }),
+    ]);
     res.json({ success: true, message: "Location updated" });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });

@@ -85,11 +85,21 @@ export const updateMyLocation = async (req: AuthRequest, res: Response): Promise
       res.status(400).json({ success: false, message: "lat/lng must be numeric" });
       return;
     }
+    const now = new Date();
     await User.findByIdAndUpdate(req.user!.id, {
       lastKnownLat: latNum,
       lastKnownLng: lngNum,
-      lastLocationUpdateAt: new Date(),
+      lastLocationUpdateAt: now,
     });
+    if (req.user?.role === "staff") {
+      await StaffProfile.findOneAndUpdate(
+        { userId: req.user.id },
+        {
+          location: { type: "Point", coordinates: [lngNum, latNum] },
+          lastLocationUpdateAt: now,
+        }
+      );
+    }
     res.json({ success: true, message: "Location updated" });
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
