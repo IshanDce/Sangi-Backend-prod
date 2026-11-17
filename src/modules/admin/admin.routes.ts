@@ -12,6 +12,7 @@ import {
   toggleBlockUser,
   getBookings,
   getBookingById,
+  adjustBookingBill,
   getServices,
   createService,
   updateService,
@@ -50,6 +51,7 @@ router.put('/users/:id/block', toggleBlockUser);
 // Bookings & Live GPS
 router.get('/bookings', getBookings);
 router.get('/bookings/:id', getBookingById);
+router.put('/bookings/:id/adjust', adjustBookingBill);
 
 // Services & Pricing
 router.get('/services', getServices);

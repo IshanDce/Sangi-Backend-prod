@@ -22,6 +22,7 @@ router.put('/users/:id/block', admin_controller_1.toggleBlockUser);
 // Bookings & Live GPS
 router.get('/bookings', admin_controller_1.getBookings);
 router.get('/bookings/:id', admin_controller_1.getBookingById);
+router.put('/bookings/:id/adjust', admin_controller_1.adjustBookingBill);
 // Services & Pricing
 router.get('/services', admin_controller_1.getServices);
 router.post('/services', admin_controller_1.createService);

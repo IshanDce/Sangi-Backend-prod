@@ -11,6 +11,7 @@ export declare const updateStaffKyc: (req: AuthRequest, res: Response) => Promis
 export declare const toggleBlockUser: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const getBookings: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const getBookingById: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const adjustBookingBill: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const getServices: (req: Request, res: Response) => Promise<void>;
 export declare const createService: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const updateService: (req: AuthRequest, res: Response) => Promise<void>;

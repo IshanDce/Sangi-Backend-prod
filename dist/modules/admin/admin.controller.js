@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getNotificationHistory = exports.sendNotification = exports.getBankAccounts = exports.rejectWithdrawal = exports.approveWithdrawal = exports.getWithdrawals = exports.deleteService = exports.updateService = exports.createService = exports.getServices = exports.getBookingById = exports.getBookings = exports.toggleBlockUser = exports.updateStaffKyc = exports.getStaffById = exports.getStaff = exports.getCustomerById = exports.getCustomers = exports.getDashboardStats = exports.getAdminProfile = exports.adminLogin = void 0;
+exports.getNotificationHistory = exports.sendNotification = exports.getBankAccounts = exports.rejectWithdrawal = exports.approveWithdrawal = exports.getWithdrawals = exports.deleteService = exports.updateService = exports.createService = exports.getServices = exports.adjustBookingBill = exports.getBookingById = exports.getBookings = exports.toggleBlockUser = exports.updateStaffKyc = exports.getStaffById = exports.getStaff = exports.getCustomerById = exports.getCustomers = exports.getDashboardStats = exports.getAdminProfile = exports.adminLogin = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const User_1 = require("../../models/User");
@@ -89,6 +89,7 @@ const getDashboardStats = async (req, res) => {
             WithdrawalRequest_1.WithdrawalRequest.countDocuments({ status: 'pending' }),
             Service_1.Service.countDocuments({ isActive: true }),
         ]);
+        const incompleteKycCount = Math.max(0, totalStaff - approvedStaffCount - pendingKycCount);
         // Financial totals
         const revenueAgg = await Booking_1.Booking.aggregate([
             { $match: { status: { $in: ['paymentSuccess', 'accepted', 'ongoing', 'serviceCompleted', 'paymentCompleted', 'completed'] } } },
@@ -119,6 +120,7 @@ const getDashboardStats = async (req, res) => {
                 totalCustomers,
                 totalStaff,
                 pendingKycCount,
+                incompleteKycCount,
                 approvedStaffCount,
                 totalBookings,
                 ongoingBookings,
@@ -239,7 +241,7 @@ const getStaff = async (req, res) => {
         const staffUsers = await User_1.User.find(userQuery).select('-passwordHash');
         const userIds = staffUsers.map((u) => u._id);
         const profileQuery = { userId: { $in: userIds } };
-        if (kycStatus && kycStatus !== 'all') {
+        if (kycStatus && kycStatus !== 'all' && kycStatus !== 'not_submitted') {
             profileQuery.kycStatus = kycStatus;
         }
         if (service && service !== 'all') {
@@ -247,15 +249,28 @@ const getStaff = async (req, res) => {
         }
         const profiles = await StaffProfile_1.StaffProfile.find(profileQuery);
         const profileMap = new Map(profiles.map((p) => [p.userId.toString(), p]));
-        // Match filtered results (include all staff if kycStatus not filtered)
+        // Match filtered results (include all staff if kycStatus not filtered or not_submitted)
         let matched = [];
         if (kycStatus && kycStatus !== 'all') {
-            matched = staffUsers
-                .filter((u) => profileMap.has(u._id.toString()))
-                .map((u) => ({
-                ...u.toObject(),
-                profile: profileMap.get(u._id.toString()),
-            }));
+            if (kycStatus === 'not_submitted') {
+                matched = staffUsers
+                    .filter((u) => {
+                    const prof = profileMap.get(u._id.toString());
+                    return !prof || prof.kycStatus === 'not_submitted';
+                })
+                    .map((u) => ({
+                    ...u.toObject(),
+                    profile: profileMap.get(u._id.toString()) || null,
+                }));
+            }
+            else {
+                matched = staffUsers
+                    .filter((u) => profileMap.has(u._id.toString()))
+                    .map((u) => ({
+                    ...u.toObject(),
+                    profile: profileMap.get(u._id.toString()),
+                }));
+            }
         }
         else {
             matched = staffUsers.map((u) => ({
@@ -550,6 +565,92 @@ const getBookingById = async (req, res) => {
     }
 };
 exports.getBookingById = getBookingById;
+// PUT /api/v1/admin/bookings/:id/adjust (Edit / Remove Service Charges & Update Booking)
+const adjustBookingBill = async (req, res) => {
+    try {
+        const { serviceCharge, additionalCharge, status, reason } = req.body;
+        if (!reason || !String(reason).trim()) {
+            res.status(400).json({ success: false, message: 'Adjustment reason is required' });
+            return;
+        }
+        const booking = await Booking_1.Booking.findById(req.params.id)
+            .populate('customerId', 'fullName phone email fcmToken')
+            .populate('staffId', 'fullName phone email fcmToken');
+        if (!booking) {
+            res.status(404).json({ success: false, message: 'Booking not found' });
+            return;
+        }
+        const oldTotal = Number(booking.totalServiceAmount || 0);
+        const oldStatus = booking.status;
+        // Calculate new charges
+        const newServiceCharge = serviceCharge !== undefined ? Math.max(0, Number(serviceCharge)) : (booking.serviceCharge || 0);
+        const newAdditionalCharge = additionalCharge !== undefined ? Math.max(0, Number(additionalCharge)) : (booking.additionalCharge || 0);
+        const newTotal = newServiceCharge + newAdditionalCharge;
+        booking.serviceCharge = newServiceCharge;
+        booking.additionalCharge = newAdditionalCharge;
+        booking.totalServiceAmount = newTotal;
+        const validStatuses = ['pendingPayment', 'paymentSuccess', 'requested', 'accepted', 'declined', 'cancelled', 'ongoing', 'serviceCompleted', 'paymentPending', 'paymentCompleted', 'completed'];
+        if (status && validStatuses.includes(status)) {
+            booking.status = status;
+        }
+        const logEntry = `\n[${new Date().toISOString()}] Admin Bill Adjustment: Total ₹${oldTotal} -> ₹${newTotal} (Status: ${oldStatus} -> ${booking.status}). Reason: ${reason.trim()}`;
+        booking.notes = (booking.notes || '') + logEntry;
+        await booking.save();
+        // Notify Customer
+        const customer = booking.customerId;
+        if (customer?._id) {
+            const custMsg = newTotal === 0
+                ? `The service charge of ₹${oldTotal} for booking #${booking.bookingNumber} was removed by Admin. You do not need to pay this amount. Reason: ${reason.trim()}`
+                : `The service bill for booking #${booking.bookingNumber} was revised from ₹${oldTotal} to ₹${newTotal} by Admin. Reason: ${reason.trim()}`;
+            await (0, fcm_1.sendPushNotification)({
+                userId: customer._id.toString(),
+                fcmToken: customer.fcmToken,
+                title: 'Booking Bill Adjusted by Admin',
+                body: custMsg,
+                type: 'booking_bill_adjusted',
+                metadata: {
+                    bookingId: booking._id.toString(),
+                    bookingNumber: booking.bookingNumber,
+                    oldTotal,
+                    newTotal,
+                    status: booking.status,
+                    reason: reason.trim(),
+                },
+            });
+        }
+        // Notify Staff
+        const staff = booking.staffId;
+        if (staff?._id) {
+            const staffMsg = newTotal === 0
+                ? `The service bill of ₹${oldTotal} submitted for booking #${booking.bookingNumber} was removed by Admin. Reason: ${reason.trim()}`
+                : `The service bill for booking #${booking.bookingNumber} was revised from ₹${oldTotal} to ₹${newTotal} by Admin. Reason: ${reason.trim()}`;
+            await (0, fcm_1.sendPushNotification)({
+                userId: staff._id.toString(),
+                fcmToken: staff.fcmToken,
+                title: 'Booking Bill Adjusted by Admin',
+                body: staffMsg,
+                type: 'booking_bill_adjusted',
+                metadata: {
+                    bookingId: booking._id.toString(),
+                    bookingNumber: booking.bookingNumber,
+                    oldTotal,
+                    newTotal,
+                    status: booking.status,
+                    reason: reason.trim(),
+                },
+            });
+        }
+        res.json({
+            success: true,
+            message: `Booking #${booking.bookingNumber} bill adjusted to ₹${newTotal}. Notifications sent to customer and staff.`,
+            booking,
+        });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+exports.adjustBookingBill = adjustBookingBill;
 // ══════════════════════════════════════════════════════════════════════
 // 7. SERVICES & BOOKING PRICING MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════
